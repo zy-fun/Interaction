@@ -20,11 +20,10 @@ def fetch_data_from_xml(xml_file: str, target_dir: str):
     edge_id = 0
     node_id = 0
     for edge in edges:
+        # id
         edge_id += 1
         osm_edge_id = edge.get('id')
         shape = edge.xpath('./lane/@shape')[0]
-        lengths = [float(i) for i in edge.xpath('./lane/@length')]
-        length = str(np.average(lengths))
         osm_from_node_id = edge.get('from')
         osm_to_node_id = edge.get('to')
         if osm_from_node_id not in node_dict:
@@ -33,6 +32,15 @@ def fetch_data_from_xml(xml_file: str, target_dir: str):
         if osm_to_node_id not in node_dict:
             node_id += 1
             node_dict[osm_to_node_id] = node_id
+
+        # attr of road segment
+        lanes = edge.findall('lane')
+        lengths = [float(lane.get('length')) for lane in lanes]
+        speeds = [float(lane.get('speed')) for lane in lanes]
+        lanes = len(lanes)
+        length = np.average(lengths)
+        speed = np.average(speeds)
+
         edge_dict[osm_edge_id] = {
             'edge_id': edge_id,
             'from_node_id': node_dict[osm_from_node_id],
@@ -41,7 +49,9 @@ def fetch_data_from_xml(xml_file: str, target_dir: str):
             'osm_from_node_id': osm_from_node_id,
             'osm_to_node_id': osm_to_node_id,
             'shape': shape,
-            'length': length
+            'lanes': lanes,
+            'length': length,
+            'speed': speed
         }
 
     # create connection_dict from xml file
@@ -68,7 +78,7 @@ def fetch_data_from_xml(xml_file: str, target_dir: str):
     # write edge_dict to csv file
     csv_file = os.path.join(target_dir, 'edge.csv')
     with open(csv_file, 'w') as f:
-        field_names = ['edge_id', 'from_node_id', 'to_node_id', 'osm_edge_id', 'osm_from_node_id', 'osm_to_node_id', 'shape', 'length']
+        field_names = ['edge_id', 'from_node_id', 'to_node_id', 'osm_edge_id', 'osm_from_node_id', 'osm_to_node_id', 'shape', 'lanes', 'length', 'speed']
         dict_writer = csv.DictWriter(f, field_names)
         dict_writer.writeheader()
         for _, edge in edge_dict.items():
