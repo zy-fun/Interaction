@@ -7,6 +7,9 @@ import numpy as np
 from torch_geometric.data import Data
 from torch_geometric.nn import GCNConv
 import csv
+import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
+
 
 # GCN模型定义
 class GCN(nn.Module):
@@ -27,20 +30,24 @@ class GCN(nn.Module):
 # 创建图数据（例如使用networkx构建)
 G = nx.DiGraph()
 
+# 在我们的架构中，路段作为图结构中的节点
 with open('data/edge.csv', 'r') as f:
     reader = csv.DictReader(f)
-    for row in reader:
-        G.add_edge(row['osm_from_node_id'], row['osm_to_node_id'])
+    for roadseg in reader:
+        # 路段属性(长度、限速、车道数)
+        roadseg_attr = {'length': float(roadseg['length'])}
+        G.add_node(roadseg['osm_edge_id'], **roadseg)
 
-with open('data/node.csv', 'r') as f:
+# 在我们的架构中，路段之间的连接关系作为图结构中的边
+with open('data/connection.csv', 'r') as f:
     reader = csv.DictReader(f)
-    for row in reader:
-        G.add_node(row['osm_node_id'])
+    for connection in reader:
+        G.add_edge(connection['from_osm_edge_id'], connection['to_osm_edge_id'])
 
 # 节点特征和标签
 num_features = 32
 hidden_dim = 64
-output_dim = 128
+output_dim = 32
 x = torch.rand(G.number_of_nodes(), num_features)
 adj = nx.to_scipy_sparse_array(G)
 edge_index = torch.tensor(np.array(adj.nonzero()), dtype=torch.long)
@@ -71,12 +78,30 @@ def contrastive_loss(z, edge_index, temperature=0.5):
 model = GCN(num_features, hidden_dim, output_dim)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.05)
 
-for epoch in range(1000):
+def plot_node_embeddings(node_embeddings, edge_index, filename):
+    node_embeddings_np = node_embeddings.detach().cpu().numpy()
+    pca = PCA(n_components=2)  # 降维到2D
+    node_embeddings_2d = pca.fit_transform(node_embeddings_np)
+
+    plt.figure(figsize=(8, 8))
+    plt.scatter(node_embeddings_2d[:, 0], node_embeddings_2d[:, 1], c='blue', s=50,zorder=100)
+
+    for i, j in edge_index.t().tolist():
+        plt.plot(node_embeddings_2d[[i,j], 0], node_embeddings_2d[[i,j], 1], c='black', alpha=0.2,zorder=0)
+
+    plt.title(filename)
+    plt.xlabel('Principal Component 1')
+    plt.ylabel('Principal Component 2')
+    plt.grid(True)
+    plt.savefig(filename)
+
+for epoch in range(100):
     model.train()
     optimizer.zero_grad()
 
     # 获取节点嵌入
     z = model(data)
+    plot_node_embeddings(z, data.edge_index, f'gnnfig/epoch_{epoch}.png')
     
     loss = contrastive_loss(z, data.edge_index)
     
@@ -85,6 +110,7 @@ for epoch in range(1000):
 
     if epoch % 50 == 0:
         print(f'Epoch {epoch}, Loss: {loss.item()}')
+
 
 # 获取最终节点嵌入
 model.eval()
