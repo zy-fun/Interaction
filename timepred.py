@@ -85,4 +85,18 @@ class TimePredModel(nn.Module):
         return out   
 
 if __name__ == "__main__":
-    pass
+    B = 32
+    window_size = 3
+    route_dim = 3
+    space_dim = 1
+    time_dim = 1
+    route_hidden = 16
+    state_hidden = 8
+    block_dims = [512, 256, 128, 64, 32, 16, 1]
+    route = torch.randn(B, window_size, route_dim)
+    space_state = torch.randn(B, window_size, space_dim)
+    time_state = torch.randn(B, time_dim)
+    model = TimePredModel(route_dim=route_dim, space_dim=space_dim, time_dim=time_dim, route_hidden=route_hidden, state_hidden=state_hidden, window_size=window_size, block_dims=block_dims)
+    out = model(route, space_state, time_state)
+    print(out.shape)
+    print(out[0])
