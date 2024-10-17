@@ -78,6 +78,10 @@ class TimePredModel(nn.Module):
         state = self.state_encoder(state)
 
         out = torch.cat([route, state], dim=-1)
+        for block in self.blocks:
+            out = block(out)
+
+        out = self.sigmoid(out)
         return out   
 
 if __name__ == "__main__":
