@@ -6,9 +6,11 @@ class Block(nn.Module):
     def __init__(self, input_dim, output_dim):
         super().__init__()
         self.fc1 = nn.Linear(input_dim, output_dim)
-        self.fc2 = nn.Linear(output_dim, output_dim)
-        self.fc = nn.Linear(input_dim, output_dim)
         self.relu = nn.ReLU()
+        self.fc2 = nn.Linear(output_dim, output_dim)
+
+        if input_dim != output_dim:
+            self.fc = nn.Linear(input_dim, output_dim)
 
     def forward(self, x):
         identity = x  
@@ -17,7 +19,9 @@ class Block(nn.Module):
         out = self.relu(out)
         out = self.fc2(out)
 
-        out += self.fc(identity)
+        if x.size(-1) != out.size(-1):
+            identity = self.fc(identity)
+        out += identity
         out = self.relu(out)
         return out 
 
@@ -45,3 +49,4 @@ if __name__ == "__main__":
     x = torch.randn(2, 3, 4)
     block = Block(4, 5)
     out = block(x)
+    print(out.shape)
