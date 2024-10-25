@@ -59,7 +59,7 @@ class TimePredModel(nn.Module):
         block_dims = [route_hidden + state_hidden] + block_dims
         block_dims = zip(block_dims[:-1], block_dims[1:])
         self.blocks = nn.ModuleList([Block(in_dim, out_dim) for in_dim, out_dim in block_dims])
-        self.sigmoid = nn.Sigmoid() 
+        # self.sigmoid = nn.Sigmoid() 
 
     def forward(self, route, space_state, time_state):
         '''
@@ -81,7 +81,7 @@ class TimePredModel(nn.Module):
         for block in self.blocks:
             out = block(out)
 
-        out = self.sigmoid(out)
+        # out = self.sigmoid(out)   # move the sigmoid from model to loss function nn.BCEWithlogitsLoss
         return out   
 
 if __name__ == "__main__":
