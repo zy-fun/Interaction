@@ -1,12 +1,13 @@
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 import pandas as pd
 import os
 import ast
 import numpy as np
 import subprocess
+from lxml import etree
 
-class Shenzhen(Dataset):
-    def __init__(self, root_path, flag, window_size=2, time_range=['00:00:00', '23:59:59'], time_unit=5):
+class Dataset_Shenzhen(Dataset):
+    def __init__(self, root_path, flag, window_size=2, time_range=['00:00:00', '23:59:59'], time_unit=5, ):
         assert flag in ['train', 'val', 'test']
         self.window_size = window_size
         self.flag = flag
@@ -20,6 +21,8 @@ class Shenzhen(Dataset):
         self.time_range = [start_time // time_unit, end_time // time_unit]
         self.time_unit = time_unit
 
+        self.x_data = []    # [route_id(window_size), route_feature(window_size), space_state(window_size), time_stay, curr_time]
+        self.y_data = []    # T or F
         self.__read_original_data(root_path)
 
     def __read_original_data(self, root_path):
@@ -28,17 +31,12 @@ class Shenzhen(Dataset):
             'train': os.path.join(root_path, f"shenzhen_train_traj.txt"),
             'val': os.path.join(root_path, f"shenzhen_val_traj.txt"),
             'test': os.path.join(root_path, f"shenzhen_test_traj.txt"),
+            'edge': os.path.join(root_path, f"edge_sumo.edg.xml"),
         }
 
         # get the total number of data in flag dataset        
         result = subprocess.run(['wc', '-l', path_dict[self.flag]], stdout=subprocess.PIPE, text=True)
         num_data = int(result.stdout.split()[0])
-
-        # get the total nubmer of data in train, val, test
-        # num_data = 0
-        # for flag in ['train', 'val', 'test']:
-        #     result = subprocess.run(['wc', '-l', path_dict[flag]], stdout=subprocess.PIPE, text=True)
-        #     num_data += int(result.stdout.split()[0])
 
         # calculate the total traffic at each time and location
         traffic_dict = {}   # (time, loc) -> traffic
@@ -51,16 +49,21 @@ class Shenzhen(Dataset):
                         traffic_dict[(t, loc)] += 1
                     else:
                         traffic_dict[(t, loc)] = 1
-                break
+
+        # normalize the traffic dict
         for key in traffic_dict:
-            traffic_dict[key] /= num_data / 1e4  # normalize the traffic
+            traffic_dict[key] /= num_data / 1e4  
+
+        # create edge_features from file
+        edge_features = {}
+        edges_tree = etree.parse(path_dict['edge'])
+        edges = edges_tree.getroot()
+        for edge in edges.xpath('./edge'):
+            edge_id = int(edge.get('id')) - 1
+            edge_features[edge_id] = float(edge.get('length'))
 
         # create x, y from file
-        x_data = [] # (prev_loc, curr_loc, next_loc, prev_loc_traffic, curr_loc_traffic, next_loc_traffic, stay_time, curr_time)
-        y_data = [] # 0 or 1
         with open(path_dict[self.flag], 'r') as f:
-            aligned_trajs = []
-            # aligned_trajs = np.full((len(lines), self.time_range[1] - self.time_range[0]), 0)
             for line in f:
                 time, duplicate_loc = zip(*[ast.literal_eval(traj_point) for traj_point in line.split()[1:]])
                 time = np.array(time) // self.time_unit
@@ -72,24 +75,32 @@ class Shenzhen(Dataset):
                 stay_time = [0] * len(duplicate_loc)
                 for i in range(len(duplicate_loc)):
                     if i == 0 or duplicate_loc[i] != duplicate_loc[i-1]:
-                        continue
+                        pass
                     else:
                         stay_time[i] = stay_time[i-1] + 1
-                a_x_data = [route_context_dict[edge].copy() for i, edge in enumerate(duplicate_loc)]
+                a_x_data = [route_context_dict[edge].copy() for edge in duplicate_loc]
                 for i in range(len(a_x_data)):
                     route_context = a_x_data[i]
-                    other_feature = [traffic_dict.get((time[i], edge), 0) for edge in route_context] + [stay_time[i]] + [time[i]]
-                    a_x_data[i] += other_feature
+                    route_feature = [float(edge_features.get(edge, 0)) for edge in route_context]
+                    space_state = [traffic_dict.get((time[i], edge), 0) for edge in route_context]
+                    time_stay = [stay_time[i]]
+                    curr_time = [time[i]]
+                    a_x_data[i] += route_feature + space_state + time_stay + curr_time
                 
-                x_data += a_x_data
+                self.x_data += a_x_data
                 a_y_data = (duplicate_loc != np.append(duplicate_loc[1:], 0)).tolist()
-                y_data += a_y_data
+                self.y_data += a_y_data
 
     def __len__(self):
-        return len(self.data) - self.window_size
+        return len(self.y_data)
 
     def __getitem__(self, idx):
-        return self.data[idx:idx+self.window_size]
+        return self.x_data[idx], self.y_data[idx]
 
 if __name__ == "__main__":
-    sz_data = Shenzhen(root_path='data_provider/data/shenzhen_8_6', flag='test', time_range=['13:00:00', '13:30:00'], time_unit=5, window_size=2)
+    sz_data = Dataset_Shenzhen(root_path='data_provider/data/shenzhen_8_6', flag='test', time_range=['13:00:00', '13:30:00'], time_unit=5, window_size=2)
+    data_loader = DataLoader(sz_data, batch_size=32, shuffle=True)
+    for x, y in data_loader:
+        print(x)
+        print(y)
+        break 
