@@ -48,37 +48,60 @@ class TimePredModel(nn.Module):
             route_dim: int = 3, 
             space_dim: int = 1, 
             time_dim: int = 1, 
+            vocab_size: int | None = None,
             route_hidden: int = 16,
+            # route_feature_hidden: int = 16,
             state_hidden: int = 16,
             window_size: int = 3, 
             block_dims: list = [], 
         ):
         super().__init__()
+        self.vocab_size = vocab_size
+        self.window_size = window_size
+        if self.vocab_size:
+            self.road_seg_emb = nn.Embedding(vocab_size, route_hidden)
+            self.road_seg_emb_proj = nn.Linear(route_hidden * self.window_size, route_hidden)
+
         self.route_encoder = Block(route_dim * window_size, route_hidden)
         self.state_encoder = Block(space_dim * window_size + time_dim, state_hidden)
-        block_dims = [route_hidden + state_hidden] + block_dims
+
+        if self.vocab_size: 
+            block_dims = [2 * route_hidden + state_hidden] + block_dims
+        else:
+            block_dims = [route_hidden + state_hidden] + block_dims
         block_dims = zip(block_dims[:-1], block_dims[1:])
         self.blocks = nn.ModuleList([Block(in_dim, out_dim) for in_dim, out_dim in block_dims])
         # self.sigmoid = nn.Sigmoid() 
 
-    def forward(self, route, space_state, time_state):
+    def forward(self, route, space_state, time_state, route_id=None):
         '''
         input:
             route: (batch_size, window_size, route_dim)
             space_state: (batch_size, window_size, space_dim)
             time_state: (batch_size, time_dim)
+            route_id: (batch_size, window_size)
         '''
         B, W, _ = route.size()
 
         route = route.reshape(B, -1)
         route = self.route_encoder(route)
+        if route_id is not None:
+            route_id_emb = self.road_seg_emb(route_id).reshape(B, -1)
+            route_id_emb = self.road_seg_emb_proj(route_id_emb)
 
         space_state = space_state.reshape(B, -1)
         state = torch.cat([space_state, time_state], dim=-1)
         state = self.state_encoder(state)
 
-        out = torch.cat([route, state], dim=-1)
+        if route_id is not None:
+            print(route.shape, state.shape, route_id_emb.shape)
+            out = torch.cat([route, state, route_id_emb], dim=-1)
+        else:
+            out = torch.cat([route, state], dim=-1)
+
+        print(out.shape)
         for block in self.blocks:
+            print(block)
             out = block(out)
 
         # out = self.sigmoid(out)   # move the sigmoid from model to loss function nn.BCEWithlogitsLoss
@@ -93,10 +116,12 @@ if __name__ == "__main__":
     route_hidden = 16
     state_hidden = 8
     block_dims = [512, 256, 128, 64, 32, 16, 1]
+    vocab_size = 27910
     route = torch.randn(B, window_size, route_dim)
+    route_id = torch.randint(0, vocab_size, (B, window_size))
     space_state = torch.randn(B, window_size, space_dim)
     time_state = torch.randn(B, time_dim)
-    model = TimePredModel(route_dim=route_dim, space_dim=space_dim, time_dim=time_dim, route_hidden=route_hidden, state_hidden=state_hidden, window_size=window_size, block_dims=block_dims)
-    out = model(route, space_state, time_state)
+    model = TimePredModel(route_dim=route_dim, space_dim=space_dim, time_dim=time_dim, route_hidden=route_hidden, state_hidden=state_hidden, window_size=window_size, block_dims=block_dims,vocab_size=vocab_size)
+    out = model(route, space_state, time_state, route_id)
     print(out.shape)
     print(out[0])
