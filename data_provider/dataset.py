@@ -1,3 +1,4 @@
+import torch
 from torch.utils.data import Dataset, DataLoader
 import pandas as pd
 import os
@@ -95,12 +96,12 @@ class Dataset_Shenzhen(Dataset):
         return len(self.y_data)
 
     def __getitem__(self, idx):
-        return self.x_data[idx], self.y_data[idx]
+        return torch.tensor(self.x_data[idx]), torch.tensor(self.y_data[idx])
 
 if __name__ == "__main__":
-    sz_data = Dataset_Shenzhen(root_path='data_provider/data/shenzhen_8_6', flag='test', time_range=['13:00:00', '13:30:00'], time_unit=5, window_size=2)
+    sz_data = Dataset_Shenzhen(root_path='data_provider/data/shenzhen_8_6', flag='test', time_range=['00:00:00', '23:59:59'], time_unit=5, window_size=2)
     data_loader = DataLoader(sz_data, batch_size=32, shuffle=True)
-    for x, y in data_loader:
-        print(x)
-        print(y)
+    for batch in data_loader:
+        x, y = batch
+        print(x, y)
         break 
