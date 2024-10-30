@@ -91,26 +91,20 @@ def plot_roadnet_from_xml(edges_file, nodes_file, fig_save_path, mapping_dict=No
 
 def plot_traj(fig, edges_loc, traj_file, fig_save_path):
     plt.figure(fig)
-    with open(traj_file, 'r') as trajs:
-        # for traj in list(trajs)[:2]:
-        while True:
-            traj = list(trajs)[1]
+    with open(traj_file, 'r') as file:
+        for traj in file: 
             id_seq = [ast.literal_eval(traj_point)[1] for traj_point in traj.split()[1:]]
             id_seq = [id_seq[i]+1 for i in range(len(id_seq)) if i == 0 or id_seq[i] != id_seq[i - 1]]
-            print(id_seq)
             loc_seq = [edges_loc.get(id, -9999) for id in id_seq]
-            print(loc_seq)
             for loc in loc_seq:
                 if loc != -9999:
                     plt.plot(loc[0], loc[1], linewidth=3, color='red', zorder=100)
-            break
-    # plt.plot(edges_loc['1'][0], edges_loc['1'][1], color='red')
     plt.savefig(fig_save_path)
 
 if __name__ == '__main__':
     # plot_roadnet('data/edge.csv')
     # plot_roadnet_with_eccentric_road('data/edge.csv', short_threshold=0.5)
     # plot_road_legnth_hist('data/edge.csv')
-    roadnet_fig, edges_loc = plot_roadnet_from_xml('data/shenzhen_8_6/edge_sumo.edg.xml', 'data/shenzhen_8_6/node_sumo.nod.xml', 'fig/shenzhen_8_6/roadnet.png')
-    plot_traj(roadnet_fig, edges_loc, 'data/shenzhen_8_6/shenzhen_test_traj.txt', 'fig/shenzhen_8_6/traj.png')
+    roadnet_fig, edges_loc = plot_roadnet_from_xml('data_provider/data/shenzhen_8_6/edge_sumo.edg.xml', 'data_provider/data/shenzhen_8_6/node_sumo.nod.xml', 'fig/shenzhen_8_6/roadnet.png')
+    plot_traj(roadnet_fig, edges_loc, 'data_provider/data/shenzhen_8_6/shenzhen_val_traj.txt', 'fig/shenzhen_8_6/traj_val.png')
     pass
