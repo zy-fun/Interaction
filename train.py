@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+import os
 from data_provider.data_provider import get_dataloader
 from timepred import TimePredModel
 from util import get_model
@@ -38,6 +39,9 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    run_name = 'data_name_{data_name} vocab_size_{vocab_size} window_size_{window_size} route_dim_{route_dim} space_dim_{space_dim} time_dim_{time_dim} route_hidden_{route_hidden} state_hidden_{state_hidden} block_dims_{block_dims} train_epochs_{train_epochs} batch_size_{batch_size} learning_rate_{learning_rate}'.format(**vars(args))
+    save_path = os.path.join('checkpoints', run_name+'.pth')
+
     train_data = get_dataloader(args, data_type='test')
     # val_data = get_dataloader(args, data_type='val')
     device = torch.device(args.device)
@@ -46,11 +50,9 @@ if __name__ == "__main__":
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
 
     window_size = args.window_size
+    train_loss = []
     for epoch in range(args.train_epochs):
-        train_loss = []
         for i, (batch_x, batch_y) in tqdm(enumerate(train_data)):
-        # while True:
-            # print(batch_x.shape)
             route_id, route, space_state, time_state = batch_x[:, :window_size], batch_x[:, window_size:window_size*2], batch_x[:, window_size*2:window_size*3], batch_x[:, window_size*3:-1]
             route_id = route_id.to(device, torch.int64)
             route = route.to(device)
@@ -82,3 +84,5 @@ if __name__ == "__main__":
             #         loss = criterion(out, val_batch_y)
             #     print(f'Epoch {epoch} Iter {i} Train Loss {sum(train_loss) / len(train_loss)} Val Loss {sum(val_loss) / len(val_loss)}')
             #     train_loss = []
+        torch.save(model.state_dict(), save_path)
+    print(train_loss)
