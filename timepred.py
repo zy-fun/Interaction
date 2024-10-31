@@ -25,23 +25,6 @@ class Block(nn.Module):
         out = self.relu(out)
         return out 
 
-# class RouteEncoder(nn.Module):
-#     def __init__(self, 
-#                  input_dim: int = 3,
-#                  hidden_dim: int = 16,):
-#         super().__init__()
-#         self.fc1 = nn.Linear(input_dim, hidden_dim)
-#         self.relu1 = nn.ReLU()
-#         self.fc2 = nn.Linear(hidden_dim, hidden_dim)
-#         self.relu2 = nn.ReLU()
-
-#     def forward(self, x):
-#         out = self.fc1(x)
-#         out = self.relu(out)
-#         out = self.fc2(out)
-#         out = self.relu(out)
-#         return out
-
 class TimePredModel(nn.Module):
     def __init__(
             self, 
@@ -81,7 +64,7 @@ class TimePredModel(nn.Module):
             time_state: (batch_size, time_dim)
             route_id: (batch_size, window_size)
         '''
-        B, W, _ = route.size()
+        B = route.size(0)
 
         route = route.reshape(B, -1)
         route = self.route_encoder(route)
