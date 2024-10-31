@@ -45,14 +45,14 @@ class Block(nn.Module):
 class TimePredModel(nn.Module):
     def __init__(
             self, 
-            route_dim: int = 3, 
+            route_dim: int = 1, 
             space_dim: int = 1, 
             time_dim: int = 1, 
             vocab_size: int | None = None,
             route_hidden: int = 16,
             # route_feature_hidden: int = 16,
             state_hidden: int = 16,
-            window_size: int = 3, 
+            window_size: int = 2, 
             block_dims: list = [], 
         ):
         super().__init__()
@@ -94,14 +94,11 @@ class TimePredModel(nn.Module):
         state = self.state_encoder(state)
 
         if route_id is not None:
-            print(route.shape, state.shape, route_id_emb.shape)
             out = torch.cat([route, state, route_id_emb], dim=-1)
         else:
             out = torch.cat([route, state], dim=-1)
 
-        print(out.shape)
         for block in self.blocks:
-            print(block)
             out = block(out)
 
         # out = self.sigmoid(out)   # move the sigmoid from model to loss function nn.BCEWithlogitsLoss
