@@ -2,6 +2,7 @@ from timepred import TimePredModel
 
 def get_model(cfg):
     model = TimePredModel(
+        vocab_size=cfg.vocab_size,
         route_dim=cfg.route_dim, 
         space_dim=cfg.space_dim, 
         time_dim=cfg.time_dim, 
