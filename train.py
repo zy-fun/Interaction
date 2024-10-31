@@ -29,10 +29,11 @@ if __name__ == "__main__":
     # optimization
     parser.add_argument('--device', type=str, default='cuda', help='device')
     parser.add_argument('--train_epochs', type=int, default=10, help='train epochs')
-    parser.add_argument('--batch_size', type=int, default=32, help='batch size of train input data')
+    parser.add_argument('--batch_size', type=int, default=64, help='batch size of train input data')
     parser.add_argument('--patience', type=int, default=10, help='early stopping patience')
-    parser.add_argument('--learning_rate', type=float, default=0.01, help='optimizer learning rate')
+    parser.add_argument('--learning_rate', type=float, default=0.1, help='optimizer learning rate')
     parser.add_argument('--percent', type=int, default=100)
+    parser.add_argument('--pos_weight', type=float, default=5.0)
 
     # evaluation
     parser.add_argument('--iter_eval', type=int, default=100, help='evaluation epochs')
@@ -46,7 +47,7 @@ if __name__ == "__main__":
     # val_data = get_dataloader(args, data_type='val')
     device = torch.device(args.device)
     model = get_model(args).to(device)
-    criterion = nn.BCEWithLogitsLoss().to(device)
+    criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([args.pos_weight])).to(device)
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
 
     window_size = args.window_size
@@ -65,10 +66,9 @@ if __name__ == "__main__":
             # route = torch.randn(args.batch_size, window_size, args.route_dim).to(device)
             # batch_y = torch.randint(0, 2, (args.batch_size, 1)).to(torch.float32).to(device)
 
-            print(route_id.shape, route.shape, space_state.shape, time_state.shape)
-            print(route_id[0], route[0], space_state[0], time_state[0])
             out = model(route, space_state, time_state, route_id).squeeze()         
-
+            # print(out[:10])
+            # print(batch_y[:10])
             loss = criterion(out, batch_y)
             optimizer.zero_grad()
             loss.backward()
