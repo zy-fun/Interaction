@@ -101,10 +101,25 @@ def plot_traj(fig, edges_loc, traj_file, fig_save_path):
                     plt.plot(loc[0], loc[1], linewidth=3, color='red', zorder=100)
     plt.savefig(fig_save_path)
 
+def plot_loss(loss_file, fig_save_path, slice_length=10000):
+    with open(loss_file, 'r') as f:
+        loss = []
+        for line in f:
+            if line.startswith('0'):
+                loss.append(float(line))
+        print(loss[:10])
+        print(loss[-10:])
+    loss = [sum(loss[i * slice_length: (i+1) *slice_length]) / slice_length for i in range(0, len(loss) // slice_length)]
+        
+    batches = range(len(loss))
+    plt.plot(batches, loss)
+    plt.savefig(fig_save_path)
+
 if __name__ == '__main__':
     # plot_roadnet('data/edge.csv')
     # plot_roadnet_with_eccentric_road('data/edge.csv', short_threshold=0.5)
     # plot_road_legnth_hist('data/edge.csv')
-    roadnet_fig, edges_loc = plot_roadnet_from_xml('data_provider/data/shenzhen_8_6/edge_sumo.edg.xml', 'data_provider/data/shenzhen_8_6/node_sumo.nod.xml', 'fig/shenzhen_8_6/roadnet.png')
-    plot_traj(roadnet_fig, edges_loc, 'data_provider/data/shenzhen_8_6/shenzhen_val_traj.txt', 'fig/shenzhen_8_6/traj_val.png')
+    # roadnet_fig, edges_loc = plot_roadnet_from_xml('data_provider/data/shenzhen_8_6/edge_sumo.edg.xml', 'data_provider/data/shenzhen_8_6/node_sumo.nod.xml', 'fig/shenzhen_8_6/roadnet.png')
+    # plot_traj(roadnet_fig, edges_loc, 'data_provider/data/shenzhen_8_6/shenzhen_val_traj.txt', 'fig/shenzhen_8_6/traj_val.png')
+    plot_loss('log.txt', 'fig/loss.png')
     pass
