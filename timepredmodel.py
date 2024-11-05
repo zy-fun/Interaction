@@ -3,11 +3,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class Block(nn.Module):
-    def __init__(self, input_dim, output_dim):
+    def __init__(self, input_dim, output_dim, activation=True):
         super().__init__()
+        self.activation = activation
         self.fc1 = nn.Linear(input_dim, output_dim)
+        self.bn1 = nn.BatchNorm1d(output_dim)
         self.relu = nn.ReLU()
         self.fc2 = nn.Linear(output_dim, output_dim)
+        self.bn2 = nn.BatchNorm1d(output_dim)
 
         if input_dim != output_dim:
             self.fc = nn.Linear(input_dim, output_dim)
@@ -16,14 +19,15 @@ class Block(nn.Module):
         identity = x  
 
         out = self.fc1(x)
+        out = self.bn1(out)
         out = self.relu(out)
         out = self.fc2(out)
+        out = self.bn2(out)
 
         if x.size(-1) != out.size(-1):
             identity = self.fc(identity)
         out += identity
-        out = self.relu(out)
-        return out 
+        return self.relu(out) if self.activation else out
 
 class TimePredModel(nn.Module):
     def __init__(
@@ -90,27 +94,17 @@ class TimePredModel(nn.Module):
 class MLPModel(nn.Module):
     def __init__(
             self, 
-            vocab_size: int | None = None,
             input_dim: int = 5,
             hidden_dims: list = [], 
             output_dim: int = 1,
         ):
         super().__init__()
-        self.vocab_size = vocab_size
-        # if self.vocab_size:
-        #     self.road_seg_emb = nn.Embedding(vocab_size, route_hidden)
-        #     self.road_seg_emb_proj = nn.Linear(route_hidden * self.window_size, route_hidden)
-
-        # if self.vocab_size: 
-        #     block_dims = [2 * route_hidden + state_hidden] + block_dims
-        # else:
-        #     block_dims = [route_hidden + state_hidden] + block_dims
-        # block_dims = zip(block_dims[:-1], block_dims[1:])
         self.input_dim = input_dim
         self.hidden_dims = hidden_dims
         self.output_dim = output_dim
-        dims = [input_dim] + hidden_dims + [output_dim]
-        self.blocks = nn.ModuleList([Block(in_dim, out_dim) for in_dim, out_dim in zip(dims[:-1], dims[1:])])
+        dims = [input_dim] + hidden_dims
+        self.blocks = nn.ModuleList([Block(in_dim, out_dim) for in_dim, out_dim in zip(dims[:-1], dims[1:])]
+                                    + [Block(hidden_dims[-1], output_dim, activation=False)])
 
     def forward(self, x):
         '''
@@ -131,11 +125,11 @@ def main_test(test_program: str):
         print(model)
         total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
         print("Total params: ", total_params)
-        exit()
         x = torch.randn(B, input_dim)
         out = model(x)
         print(out.shape)
-        print(out[0])
+        print(out.squeeze())
+        print(nn.functional.sigmoid(out).squeeze())
     else:
         B = 32
         window_size = 2
@@ -155,7 +149,7 @@ def main_test(test_program: str):
         print(total_params)
         out = model(route, space_state, time_state, route_id)
         print(out.shape)
-        print(out[0])
+        print(out)
 
 
 if __name__ == "__main__":
