@@ -1,10 +1,10 @@
 from timepredmodel import TimePredModel, MLPModel
 
 def get_model(cfg):
-    if cfg.name == 'mlp':
+    if cfg.model == 'mlp':
         model = MLPModel(
             input_dim=cfg.input_dim, 
-            hidden_dims=cfg.hidden_dims, 
+            hidden_dims=cfg.block_dims, 
             output_dim=cfg.output_dim
         )
     else:
