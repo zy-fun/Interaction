@@ -4,7 +4,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 import os
 from data_provider.data_provider import get_dataloader
-from timepred import TimePredModel
+from timepredmodel import TimePredModel
 from util import get_model
 from tqdm import tqdm
 import argparse
@@ -17,6 +17,7 @@ if __name__ == "__main__":
     # parser.add_argument('--data_type', type=str, default='train', help='data type')
 
     # model define
+    parser.add_argument('--model', type=str, default='mlp', help='model name')
     parser.add_argument('--vocab_size', type=int, default=27910, help='vocab size')
     parser.add_argument('--window_size', type=int, default=2, help='window size')
     parser.add_argument('--route_dim', type=int, default=1, help='route dimension')
@@ -24,14 +25,16 @@ if __name__ == "__main__":
     parser.add_argument('--time_dim', type=int, default=1, help='time dimension')
     parser.add_argument('--route_hidden', type=int, default=16, help='route hidden dimension')
     parser.add_argument('--state_hidden', type=int, default=8, help='state hidden dimension')
-    parser.add_argument('--block_dims', type=int, nargs='+', default=[512, 256, 128, 64, 32, 16, 1], help='block dimensions')
+    parser.add_argument('--input_dim', type=int, default=5, )
+    parser.add_argument('--output_dim', type=int, default=1)
+    parser.add_argument('--block_dims', type=int, nargs='+', default=[64, 64, 32, 16], help='block dimensions')
 
     # optimization
     parser.add_argument('--device', type=str, default='cuda', help='device')
     parser.add_argument('--train_epochs', type=int, default=10, help='train epochs')
-    parser.add_argument('--batch_size', type=int, default=64, help='batch size of train input data')
+    parser.add_argument('--batch_size', type=int, default=128, help='batch size of train input data')
     parser.add_argument('--patience', type=int, default=10, help='early stopping patience')
-    parser.add_argument('--learning_rate', type=float, default=0.1, help='optimizer learning rate')
+    parser.add_argument('--learning_rate', type=float, default=0.01, help='optimizer learning rate')
     parser.add_argument('--percent', type=int, default=100)
     parser.add_argument('--pos_weight', type=float, default=5.0)
 
@@ -40,6 +43,9 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    device = torch.device(args.device)
+    model = get_model(args).to(device)
+
     run_name = 'data_name_{data_name} vocab_size_{vocab_size} window_size_{window_size} route_dim_{route_dim} space_dim_{space_dim} time_dim_{time_dim} route_hidden_{route_hidden} state_hidden_{state_hidden} block_dims_{block_dims} train_epochs_{train_epochs} batch_size_{batch_size} learning_rate_{learning_rate}'.format(**vars(args))
     save_path = os.path.join('checkpoints', run_name+'.pth')
 
@@ -47,11 +53,33 @@ if __name__ == "__main__":
     # val_data = get_dataloader(args, data_type='val')
     device = torch.device(args.device)
     model = get_model(args).to(device)
+    total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print("Total params: ", total_params)
     criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([args.pos_weight])).to(device)
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
 
     window_size = args.window_size
     train_loss = []
+
+    for epoch in range(args.train_epochs):
+        for i, (batch_x, batch_y) in tqdm(enumerate(train_data)):
+            batch_x = batch_x[:,2:-1].to(device)
+            batch_y = batch_y.to(torch.float32).to(device)
+
+            out = model(batch_x).squeeze()    
+            loss = criterion(out, batch_y)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            train_loss.append(loss.item())
+            print(out.squeeze())
+            print(nn.functional.sigmoid(out).squeeze())
+            print(batch_y)
+            print(loss.item())
+            exit()
+        torch.save(model.state_dict(), save_path)
+    print(train_loss)
+    exit()
     for epoch in range(args.train_epochs):
         for i, (batch_x, batch_y) in tqdm(enumerate(train_data)):
             route_id, route, space_state, time_state = batch_x[:, :window_size], batch_x[:, window_size:window_size*2], batch_x[:, window_size*2:window_size*3], batch_x[:, window_size*3:-1]
@@ -60,15 +88,10 @@ if __name__ == "__main__":
             space_state = space_state.to(device)
             time_state = time_state.to(device)
             batch_y = batch_y.to(torch.float32).to(device)
-            # route_id = torch.randint(0, args.vocab_size, (args.batch_size, window_size)).to(device)
-            # space_state = torch.randn(args.batch_size, window_size, args.space_dim).to(device)
-            # time_state = torch.randn(args.batch_size, args.time_dim).to(device)
-            # route = torch.randn(args.batch_size, window_size, args.route_dim).to(device)
-            # batch_y = torch.randint(0, 2, (args.batch_size, 1)).to(torch.float32).to(device)
+
 
             out = model(route, space_state, time_state, route_id).squeeze()         
-            # print(out[:10])
-            # print(batch_y[:10])
+            print(out)
             loss = criterion(out, batch_y)
             optimizer.zero_grad()
             loss.backward()
@@ -76,13 +99,5 @@ if __name__ == "__main__":
             train_loss.append(loss.item())
             print(loss.item())
 
-            # if i % args.iter_eval == 0:
-            #     for val_batch_x, val_batch_y in val_data:
-            #         route_id, route, space_state, time_state = val_batch_x[:, :window_size], val_batch_x[:, window_size:window_size*2], val_batch_x[:, window_size*2:window_size*2+1], val_batch_x[:, window_size*2+1:-1]
-            #         current_time = val_batch_x[:, -1]
-            #         out = model(route, space_state, time_state, route_id)
-            #         loss = criterion(out, val_batch_y)
-            #     print(f'Epoch {epoch} Iter {i} Train Loss {sum(train_loss) / len(train_loss)} Val Loss {sum(val_loss) / len(val_loss)}')
-            #     train_loss = []
         torch.save(model.state_dict(), save_path)
     print(train_loss)
