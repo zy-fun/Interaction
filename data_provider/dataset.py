@@ -8,7 +8,7 @@ import subprocess
 from lxml import etree
 
 class miniDataset(Dataset):
-    def __init__(self, root_path, flag, window_size=2, traj_num=1000, time_unit=5):
+    def __init__(self, root_path, flag, window_size=2, traj_num=5000, time_unit=5):
         assert flag in ['train', 'val', 'test']
         self.window_size = window_size
         self.flag = flag
@@ -176,6 +176,28 @@ class Dataset_Shenzhen(Dataset):
 
     def __getitem__(self, idx):
         return torch.tensor(self.x_data[idx]), torch.tensor(self.y_data[idx])
+
+class DownSampledDataset(Dataset):
+    def __init__(self, data_x, data_y, pos_label = 1):
+        self.data_x = data_x
+        self.data_y = data_y
+        self.pos_label = pos_label
+        self.__down_sample()
+    
+    def __down_sample(self):
+        pos_indices = [i for i in range(len(self.data_y)) if self.data_y[i] == self.pos_label]
+        neg_indices = [i for i in range(len(self.data_y)) if self.data_y[i] != self.pos_label]
+        min_len = min(len(pos_indices), len(neg_indices))
+        indices = pos_indices[:min_len] + neg_indices[:min_len]
+        self.data_x = [self.data_x[i] for i in indices]
+        self.data_y = [self.data_y[i] for i in indices]
+
+    def __len__(self):
+        assert len(self.data_x) == len(self.data_y)
+        return len(self.data_y)
+    
+    def __getitem__(self, idx):
+        return torch.tensor(self.data_x[idx]), torch.tensor(self.data_y[idx])
 
 if __name__ == "__main__":
     sz_data = Dataset_Shenzhen(root_path='data_provider/data/shenzhen_8_6', flag='test', time_range=['00:00:00', '23:59:59'], time_unit=5, window_size=2)
