@@ -17,5 +17,5 @@ def get_dataloader(cfg, data_type: str):
     if cfg.downsample:
         data = DownSampledDataset(data.x_data, data.y_data)
 
-    data_loader = DataLoader(data, batch_size=cfg.batch_size, shuffle=True)
+    data_loader = DataLoader(data, batch_size=cfg.batch_size, shuffle=cfg.shuffle)
     return data_loader

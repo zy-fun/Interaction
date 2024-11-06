@@ -16,6 +16,7 @@ if __name__ == "__main__":
     # data loader
     parser.add_argument('--data_name', type=str, default='shenzhen_8_6', help='data name')
     parser.add_argument('--downsample', type=bool, default=True, help='downsample')
+    parser.add_argument('--shuffle', type=bool, default=False, help='shuffle')
 
     # model define
     parser.add_argument('--model', type=str, default='mlp', help='model name')
