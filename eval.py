@@ -13,7 +13,7 @@ if __name__ == "__main__":
 
     # data loader
     parser.add_argument('--data_name', type=str, default='shenzhen_8_6', help='data name')
-    parser.add_argument('--downsample', type=bool, default=True, help='downsample')
+    parser.add_argument('--downsample', type=bool, default=False, help='downsample')
 
     # model define
     parser.add_argument('--model', type=str, default='mlp', help='model name')
@@ -38,12 +38,12 @@ if __name__ == "__main__":
 
     # define and load model
     model = get_model(args).to(device)
-    file_name = "data_name_shenzhen_8_6 vocab_size_27910 window_size_2 route_dim_1 space_dim_1 time_dim_1 route_hidden_16 state_hidden_8 block_dims_[64, 64, 32, 16] train_epochs_10 batch_size_128 learning_rate_0.01.pth"
+    file_name = "data_name_shenzhen_8_6 vocab_size_27910 window_size_2 route_dim_1 space_dim_1 time_dim_1 route_hidden_16 state_hidden_8 block_dims_[64, 64, 32, 16] train_epochs_100 batch_size_128 learning_rate_0.005.pth"
     print(file_name)
     load_path = os.path.join('checkpoints', file_name)
     model.load_state_dict(torch.load(load_path))
 
-    test_data = get_dataloader(args, data_type='val')
+    test_data = get_dataloader(args, data_type='test')
     model.eval()
 
     total_num = 0
