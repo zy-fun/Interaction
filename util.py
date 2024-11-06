@@ -1,4 +1,4 @@
-from timepredmodel import TimePredModel, MLPModel
+from models.timepredmodel import TimePredModel, MLPModel
 
 def get_model(cfg):
     if cfg.model == 'mlp':

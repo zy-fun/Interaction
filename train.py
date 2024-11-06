@@ -67,8 +67,8 @@ if __name__ == "__main__":
     window_size = args.window_size
     train_loss = []
 
-    for epoch in range(args.train_epochs):
-        for i, (batch_x, batch_y) in tqdm(enumerate(train_data)):
+    for epoch in tqdm(range(args.train_epochs), unit='epoch'):
+        for i, (batch_x, batch_y) in tqdm(enumerate(train_data), leave=False, unit='batch'):
             batch_x = batch_x[:,2:-1].to(device)
             batch_y = batch_y.to(torch.float32).to(device)
 
