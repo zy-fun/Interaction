@@ -4,7 +4,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 import os
 from data_provider.data_provider import get_dataloader
-from timepredmodel import TimePredModel
+from models.timepredmodel import TimePredModel
 from util import get_model
 from tqdm import tqdm
 import argparse
