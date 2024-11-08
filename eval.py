@@ -13,7 +13,8 @@ if __name__ == "__main__":
 
     # data loader
     parser.add_argument('--data_name', type=str, default='shenzhen_8_6', help='data name')
-    parser.add_argument('--downsample', type=bool, default=False, help='downsample')
+    parser.add_argument('--downsample', type=bool, default=True, help='downsample')
+    parser.add_argument('--shuffle', type=bool, default=True, help='shuffle')
 
     # model define
     parser.add_argument('--model', type=str, default='mlp', help='model name')
@@ -42,21 +43,33 @@ if __name__ == "__main__":
     print(file_name)
     load_path = os.path.join('checkpoints', file_name)
     model.load_state_dict(torch.load(load_path))
+    # for name, param in model.named_parameters():
+    #     print(f"Parameter name: {name}")
+    #     print(f"Parameter value: {param}\n")
 
     test_data = get_dataloader(args, data_type='test')
     model.eval()
 
     total_num = 0
     correct_num = 0
+    criterion = nn.BCEWithLogitsLoss()
+    total_loss = []
     for i, (batch_x, batch_y) in tqdm(enumerate(test_data)):
         batch_x = batch_x[:,2:-1].to(device)
         batch_y = batch_y.to(torch.float32).to(device)
 
         out = model(batch_x).squeeze() 
+        loss = criterion(out, batch_y)
+        total_loss.append(loss.item())
         out = nn.functional.sigmoid(out)   
         out = (out > 0.5).float()
         correct_num += torch.sum(out == batch_y).item()
         total_num += len(batch_y)
+
+    print(batch_x)
+    print(out)
+    print(batch_y)
     print("total_num: ", total_num)
     print('correct_num: ', correct_num)
     print('accuracy: ', correct_num / total_num)
+    print('test loss: ', sum(total_loss) / len(total_loss))
