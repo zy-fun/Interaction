@@ -13,8 +13,8 @@ class Block(nn.Module):
         self.bn2 = nn.BatchNorm1d(output_dim)
 
         if input_dim != output_dim:
-            self.proj = nn.Linear(input_dim, output_dim)
-            self.bn_proj = nn.BatchNorm1d(output_dim)
+            self.fc_res = nn.Linear(input_dim, output_dim)
+        self.bn_res = nn.BatchNorm1d(output_dim)
 
         if self.activation:
             self.relu2 = nn.ReLU()
@@ -29,8 +29,9 @@ class Block(nn.Module):
         out = self.bn2(out)
 
         if x.size(-1) != out.size(-1):
-            identity = self.proj(identity)
-            identity = self.bn_proj(identity)
+            identity = self.fc_res(identity)
+        identity = self.bn_res(identity)
+        
         out += identity
 
         if self.activation:
