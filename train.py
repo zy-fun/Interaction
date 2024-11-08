@@ -16,7 +16,7 @@ if __name__ == "__main__":
     # data loader
     parser.add_argument('--data_name', type=str, default='shenzhen_8_6', help='data name')
     parser.add_argument('--downsample', type=bool, default=True, help='downsample')
-    parser.add_argument('--shuffle', type=bool, default=False, help='shuffle')
+    parser.add_argument('--shuffle', type=bool, default=True, help='shuffle')
 
     # model define
     parser.add_argument('--model', type=str, default='mlp', help='model name')
@@ -32,6 +32,8 @@ if __name__ == "__main__":
     parser.add_argument('--block_dims', type=int, nargs='+', default=[64, 64, 32, 16], help='block dimensions')
 
     # optimization
+    parser.add_argument('--load_model', type=bool, default=False, help='load model')
+    parser.add_argument('--load_path', type=str, default="checkpoints/data_name_shenzhen_8_6 vocab_size_27910 window_size_2 route_dim_1 space_dim_1 time_dim_1 route_hidden_16 state_hidden_8 block_dims_[64, 64, 32, 16] train_epochs_100 batch_size_128 learning_rate_0.005.pth", help='load path')
     parser.add_argument('--device', type=str, default='cuda', help='device')
     parser.add_argument('--train_epochs', type=int, default=100, help='train epochs')
     parser.add_argument('--batch_size', type=int, default=128, help='batch size of train input data')
@@ -58,9 +60,11 @@ if __name__ == "__main__":
     device = torch.device(args.device)
     model = get_model(args).to(device)
     total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print('Save path: ', save_path)
     print("Total params: ", total_params)
-    print(type(args.pos_weight))
+
     # criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([args.pos_weight])).to(device) if args.pos_weight is not None else nn.BCEWithLogitsLoss()
+
     criterion = nn.BCEWithLogitsLoss().to(device)
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
 

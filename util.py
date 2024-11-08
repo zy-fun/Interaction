@@ -1,4 +1,5 @@
 from models.timepredmodel import TimePredModel, MLPModel
+import torch
 
 def get_model(cfg):
     if cfg.model == 'mlp':
@@ -18,4 +19,7 @@ def get_model(cfg):
             window_size=cfg.window_size, 
             block_dims=cfg.block_dims
         ) 
+
+    if cfg.load_model:
+        model.load_state_dict(torch.load(cfg.load_path))
     return model
