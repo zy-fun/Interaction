@@ -8,26 +8,35 @@ class Block(nn.Module):
         self.activation = activation
         self.fc1 = nn.Linear(input_dim, output_dim)
         self.bn1 = nn.BatchNorm1d(output_dim)
-        self.relu = nn.ReLU()
+        self.relu1 = nn.ReLU()
         self.fc2 = nn.Linear(output_dim, output_dim)
         self.bn2 = nn.BatchNorm1d(output_dim)
 
         if input_dim != output_dim:
-            self.fc = nn.Linear(input_dim, output_dim)
+            self.proj = nn.Linear(input_dim, output_dim)
+            self.bn_proj = nn.BatchNorm1d(output_dim)
+
+        if self.activation:
+            self.relu2 = nn.ReLU()
 
     def forward(self, x):
         identity = x  
 
         out = self.fc1(x)
         out = self.bn1(out)
-        out = self.relu(out)
+        out = self.relu1(out)
         out = self.fc2(out)
         out = self.bn2(out)
 
         if x.size(-1) != out.size(-1):
-            identity = self.fc(identity)
+            identity = self.proj(identity)
+            identity = self.bn_proj(identity)
         out += identity
-        return self.relu(out) if self.activation else out
+
+        if self.activation:
+            out = self.relu2(out)
+
+        return out
 
 class TimePredModel(nn.Module):
     def __init__(
