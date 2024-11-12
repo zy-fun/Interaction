@@ -79,17 +79,15 @@ if __name__ == "__main__":
     parser.add_argument('--block_dims', type=int, nargs='+', default=[64, 64, 32, 16], help='block dimensions')
 
     # optimization
+    parser.add_argument('--load_model', type=bool, default=True, help='load model')
+    parser.add_argument('--load_path', type=str, default="checkpoints/data_name_shenzhen_8_6 vocab_size_27910 window_size_2 route_dim_1 space_dim_1 time_dim_1 route_hidden_16 state_hidden_8 block_dims_[64, 64, 32, 16] train_epochs_100 batch_size_128 learning_rate_0.005.pth", help='load path')
     parser.add_argument('--device', type=str, default='cuda', help='device')
     parser.add_argument('--batch_size', type=int, default=128, help='batch size of train input data')
 
     args = parser.parse_args()
     device = torch.device(args.device)
     model = get_model(args).to(device)
-
-    file_name = "data_name_shenzhen_8_6 vocab_size_27910 window_size_2 route_dim_1 space_dim_1 time_dim_1 route_hidden_16 state_hidden_8 block_dims_[64, 64, 32, 16] train_epochs_100 batch_size_128 learning_rate_0.005.pth"
-    print(file_name)
-    load_path = os.path.join('checkpoints', file_name)
-    model.load_state_dict(torch.load(load_path))
+    model.eval()
 
     batch_x = batch_x.to(device)
     batch_y = batch_y.to(device)
@@ -121,7 +119,7 @@ if __name__ == "__main__":
     out = nn.functional.sigmoid(out)
     out = out > 0.5
     print()
-    print(out)
+    print(out.float())
 
     print()
     print(batch_y.squeeze())

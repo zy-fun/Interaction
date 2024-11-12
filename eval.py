@@ -29,47 +29,40 @@ if __name__ == "__main__":
     parser.add_argument('--output_dim', type=int, default=1)
     parser.add_argument('--block_dims', type=int, nargs='+', default=[64, 64, 32, 16], help='block dimensions')
 
-    # optimization
+    # evaluation
+    parser.add_argument('--load_model', type=bool, default=True, help='load model')
+    parser.add_argument('--load_path', type=str, default="checkpoints/data_name_shenzhen_8_6 vocab_size_27910 window_size_2 route_dim_1 space_dim_1 time_dim_1 route_hidden_16 state_hidden_8 block_dims_[64, 64, 32, 16] train_epochs_100 batch_size_128 learning_rate_0.005.pth", help='load path')
     parser.add_argument('--device', type=str, default='cuda', help='device')
     parser.add_argument('--batch_size', type=int, default=128, help='batch size of train input data')
 
     args = parser.parse_args()
     device = torch.device(args.device)
     model = get_model(args).to(device)
+    model.train()
 
-    # define and load model
-    model = get_model(args).to(device)
-    file_name = "data_name_shenzhen_8_6 vocab_size_27910 window_size_2 route_dim_1 space_dim_1 time_dim_1 route_hidden_16 state_hidden_8 block_dims_[64, 64, 32, 16] train_epochs_100 batch_size_128 learning_rate_0.005.pth"
-    print(file_name)
-    load_path = os.path.join('checkpoints', file_name)
-    model.load_state_dict(torch.load(load_path))
-    # for name, param in model.named_parameters():
-    #     print(f"Parameter name: {name}")
-    #     print(f"Parameter value: {param}\n")
+    for data_type in ['val', 'test']:
+        data = get_dataloader(args, data_type=data_type)
 
-    test_data = get_dataloader(args, data_type='test')
-    model.eval()
+        total_num = 0
+        correct_num = 0
+        criterion = nn.BCEWithLogitsLoss()
+        total_loss = []
+        for i, (batch_x, batch_y) in tqdm(enumerate(data)):
+            batch_x = batch_x[:,2:-1].to(device)
+            batch_y = batch_y.to(torch.float32).to(device)
 
-    total_num = 0
-    correct_num = 0
-    criterion = nn.BCEWithLogitsLoss()
-    total_loss = []
-    for i, (batch_x, batch_y) in tqdm(enumerate(test_data)):
-        batch_x = batch_x[:,2:-1].to(device)
-        batch_y = batch_y.to(torch.float32).to(device)
+            out = model(batch_x).squeeze() 
+            loss = criterion(out, batch_y)
+            total_loss.append(loss.item())
+            out = nn.functional.sigmoid(out)   
+            out = (out > 0.5).float()
+            correct_num += torch.sum(out == batch_y).item()
+            total_num += len(batch_y)
 
-        out = model(batch_x).squeeze() 
-        loss = criterion(out, batch_y)
-        total_loss.append(loss.item())
-        out = nn.functional.sigmoid(out)   
-        out = (out > 0.5).float()
-        correct_num += torch.sum(out == batch_y).item()
-        total_num += len(batch_y)
-
-    print(batch_x)
-    print(out)
-    print(batch_y)
-    print("total_num: ", total_num)
-    print('correct_num: ', correct_num)
-    print('accuracy: ', correct_num / total_num)
-    print('test loss: ', sum(total_loss) / len(total_loss))
+        print(batch_x)
+        print(out)
+        print(batch_y)
+        print(data_type, "total_num: ", total_num)
+        print(data_type, 'correct_num: ', correct_num)
+        print(data_type, 'accuracy: ', correct_num / total_num)
+        print(data_type, 'loss: ', sum(total_loss) / len(total_loss))
