@@ -9,10 +9,18 @@ from lxml import etree
 from sklearn.datasets import make_classification
 
 class BinaryClassificationDataset(Dataset):
-    def __init__(self, n_samples, n_features):
-        x, y = make_classification(n_samples=n_samples, n_features=n_features)
-        self.x_data = torch.tensor(x)
-        self.y_data = torch.tensor(y)
+    def __init__(self, n_samples=10000, n_features=8, data_type='train'):
+        x, y = make_classification(n_samples=n_samples, n_features=n_features, random_state=42, shuffle=False)
+        split_idx = int(0.9 * n_samples)
+        
+        if data_type == 'train':
+            self.x_data = torch.tensor(x[ :split_idx]).float()
+            self.y_data = torch.tensor(y[ :split_idx]).float()
+        elif data_type == 'test':
+            self.x_data = torch.tensor(x[split_idx: ]).float()
+            self.y_data = torch.tensor(y[split_idx: ]).float()
+
+        self.x_data = (self.x_data - self.x_data.mean(dim=-1, keepdim=True)) / self.x_data.std(dim=-1, keepdim=True)
 
     def __len__(self):
         assert self.x_data.size(0) == self.y_data.size(0)
