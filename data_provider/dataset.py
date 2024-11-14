@@ -86,7 +86,8 @@ class miniDataset(Dataset):
         self.x_data = (self.x_data - self.x_data.mean(dim=-1, keepdim=True)) / self.x_data.std(dim=-1, keepdim=True)
 
     def __len__(self):
-        return len(self.y_data)
+        assert self.x_data.size(0) == self.y_data.size(0)
+        return self.y_data.size(0)
 
     def __getitem__(self, idx):
         return self.x_data[idx], self.y_data[idx]
@@ -183,19 +184,29 @@ class Dataset_Shenzhen(Dataset):
         self.x_data = (self.x_data - self.x_data.mean(dim=-1, keepdim=True)) / self.x_data.std(dim=-1, keepdim=True)
 
     def __len__(self):
-        return len(self.y_data)
+        assert self.x_data.size(0) == self.y_data.size(0)
+        return self.y_data.size(0)
 
     def __getitem__(self, idx):
         return self.x_data[idx], self.y_data[idx]
 
 class DownSampledDataset(Dataset):
     def __init__(self, data_x, data_y, pos_label = 1):
-        self.data_x = data_x
-        self.data_y = data_y
         self.pos_label = pos_label
-        self.__down_sample()
+        self.__down_sample(data_x, data_y)
     
-    def __down_sample(self):
+    def __down_sample(self, data_x, data_y):
+        zero_indices = torch.nonzero(data_y == 0).squeeze()
+        one_indices = torch.nonzero(data_y == 1).squeeze()
+
+        num_zeros = zero_indices.size(0)
+        num_ones = one_indices.size(0)
+        zero_indices = zero_indices[torch.randperm(num_zeros)[:num_ones]]
+    
+        self.data_x = torch.cat([data_x[zero_indices], data_x[one_indices]], dim=0)
+        self.data_y = torch.cat([data_y[zero_indices], data_y[one_indices]], dim=0)
+
+        return
         pos_indices = [i for i in range(len(self.data_y)) if self.data_y[i] == self.pos_label]
         neg_indices = [i for i in range(len(self.data_y)) if self.data_y[i] != self.pos_label]
         min_len = min(len(pos_indices), len(neg_indices))
@@ -204,15 +215,16 @@ class DownSampledDataset(Dataset):
         self.data_y = [self.data_y[i] for i in indices]
 
     def __len__(self):
-        assert len(self.data_x) == len(self.data_y)
-        return len(self.data_y)
+        assert self.data_x.size(0) == self.data_y.size(0)
+        return self.data_y.size(0)
     
     def __getitem__(self, idx):
-        return torch.tensor(self.data_x[idx]), torch.tensor(self.data_y[idx])
+        return self.data_x[idx], self.data_y[idx]
 
 if __name__ == "__main__":
     # sz_data = Dataset_Shenzhen(root_path='data_provider/data/shenzhen_8_6', flag='test', time_range=['00:00:00', '23:59:59'], time_unit=5, window_size=2)
     sz_data = miniDataset(root_path='data_provider/data/shenzhen_8_6', flag='test', time_unit=5, window_size=2)
+    sz_data = DownSampledDataset(sz_data.x_data, sz_data.y_data)
     data_loader = DataLoader(sz_data, batch_size=4, shuffle=True)
     for batch in data_loader:
         x, y = batch
