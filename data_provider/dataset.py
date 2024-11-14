@@ -16,8 +16,6 @@ class miniDataset(Dataset):
         self.traj_num = traj_num
         self.time_unit = time_unit
 
-        self.x_data = []    # [route_id(window_size), route_feature(window_size), space_state(window_size), time_stay, curr_time]
-        self.y_data = []    # T or F
         self.__read_original_data(root_path)
 
     def __read_original_data(self, root_path):
@@ -53,6 +51,8 @@ class miniDataset(Dataset):
             edge_features[edge_id] = float(edge.get('length'))
 
         # create x, y from file
+        x_data = []
+        y_data = []
         with open(path_dict[self.flag], 'r') as f:
             for line in list(f)[:self.traj_num]:
                 time, duplicate_loc = zip(*[ast.literal_eval(traj_point) for traj_point in line.split()[1:]])
@@ -76,15 +76,20 @@ class miniDataset(Dataset):
                     curr_time = [time[i]]
                     a_x_data[i] += route_feature + space_state + time_stay + curr_time
                 
-                self.x_data += a_x_data
+                x_data += a_x_data
                 a_y_data = (duplicate_loc != np.append(duplicate_loc[1:], 0)).tolist()
-                self.y_data += a_y_data
+                y_data += a_y_data
+        self.x_data = torch.tensor(x_data)
+        self.y_data = torch.tensor(y_data)
+
+        # normalization on each feature
+        self.x_data = (self.x_data - self.x_data.mean(dim=-1, keepdim=True)) / self.x_data.std(dim=-1, keepdim=True)
 
     def __len__(self):
         return len(self.y_data)
 
     def __getitem__(self, idx):
-        return torch.tensor(self.x_data[idx]), torch.tensor(self.y_data[idx])
+        return self.x_data[idx], self.y_data[idx]
 
 
 class Dataset_Shenzhen(Dataset):
@@ -102,9 +107,8 @@ class Dataset_Shenzhen(Dataset):
         self.time_range = [start_time // time_unit, end_time // time_unit]
         self.time_unit = time_unit
 
-        self.x_data = []    # [route_id(window_size), route_feature(window_size), space_state(window_size), time_stay, curr_time]
-        self.y_data = []    # T or F
         self.__read_original_data(root_path)
+
 
     def __read_original_data(self, root_path):
         # unit time is not defined well and may cause error
@@ -144,6 +148,8 @@ class Dataset_Shenzhen(Dataset):
             edge_features[edge_id] = float(edge.get('length'))
 
         # create x, y from file
+        x_data = []
+        y_data = []
         with open(path_dict[self.flag], 'r') as f:
             for line in f:
                 time, duplicate_loc = zip(*[ast.literal_eval(traj_point) for traj_point in line.split()[1:]])
@@ -167,15 +173,20 @@ class Dataset_Shenzhen(Dataset):
                     curr_time = [time[i]]
                     a_x_data[i] += route_feature + space_state + time_stay + curr_time
                 
-                self.x_data += a_x_data
+                x_data += a_x_data
                 a_y_data = (duplicate_loc != np.append(duplicate_loc[1:], 0)).tolist()
-                self.y_data += a_y_data
+                y_data += a_y_data
+        self.x_data = torch.tensor(x_data)
+        self.y_data = torch.tensor(y_data)
+
+        # normalization on each feature
+        self.x_data = (self.x_data - self.x_data.mean(dim=-1, keepdim=True)) / self.x_data.std(dim=-1, keepdim=True)
 
     def __len__(self):
         return len(self.y_data)
 
     def __getitem__(self, idx):
-        return torch.tensor(self.x_data[idx]), torch.tensor(self.y_data[idx])
+        return self.x_data[idx], self.y_data[idx]
 
 class DownSampledDataset(Dataset):
     def __init__(self, data_x, data_y, pos_label = 1):
@@ -200,8 +211,9 @@ class DownSampledDataset(Dataset):
         return torch.tensor(self.data_x[idx]), torch.tensor(self.data_y[idx])
 
 if __name__ == "__main__":
-    sz_data = Dataset_Shenzhen(root_path='data_provider/data/shenzhen_8_6', flag='test', time_range=['00:00:00', '23:59:59'], time_unit=5, window_size=2)
-    data_loader = DataLoader(sz_data, batch_size=32, shuffle=True)
+    # sz_data = Dataset_Shenzhen(root_path='data_provider/data/shenzhen_8_6', flag='test', time_range=['00:00:00', '23:59:59'], time_unit=5, window_size=2)
+    sz_data = miniDataset(root_path='data_provider/data/shenzhen_8_6', flag='test', time_unit=5, window_size=2)
+    data_loader = DataLoader(sz_data, batch_size=4, shuffle=True)
     for batch in data_loader:
         x, y = batch
         print(x, y)
