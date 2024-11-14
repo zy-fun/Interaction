@@ -6,9 +6,23 @@ import ast
 import numpy as np
 import subprocess
 from lxml import etree
+from sklearn.datasets import make_classification
+
+class BinaryClassificationDataset(Dataset):
+    def __init__(self, n_samples, n_features):
+        x, y = make_classification(n_samples=n_samples, n_features=n_features)
+        self.x_data = torch.tensor(x)
+        self.y_data = torch.tensor(y)
+
+    def __len__(self):
+        assert self.x_data.size(0) == self.y_data.size(0)
+        return self.y_data.size(0)
+
+    def __getitem__(self, idx):
+        return self.x_data[idx], self.y_data[idx]
 
 class miniDataset(Dataset):
-    def __init__(self, root_path, flag, window_size=2, traj_num=5000, time_unit=5):
+    def __init__(self, root_path, flag, window_size=2, traj_num=50, time_unit=5):
         assert flag in ['train', 'val', 'test']
         self.window_size = window_size
         self.flag = flag
@@ -206,14 +220,6 @@ class DownSampledDataset(Dataset):
         self.data_x = torch.cat([data_x[zero_indices], data_x[one_indices]], dim=0)
         self.data_y = torch.cat([data_y[zero_indices], data_y[one_indices]], dim=0)
 
-        return
-        pos_indices = [i for i in range(len(self.data_y)) if self.data_y[i] == self.pos_label]
-        neg_indices = [i for i in range(len(self.data_y)) if self.data_y[i] != self.pos_label]
-        min_len = min(len(pos_indices), len(neg_indices))
-        indices = pos_indices[:min_len] + neg_indices[:min_len]
-        self.data_x = [self.data_x[i] for i in indices]
-        self.data_y = [self.data_y[i] for i in indices]
-
     def __len__(self):
         assert self.data_x.size(0) == self.data_y.size(0)
         return self.data_y.size(0)
@@ -223,11 +229,15 @@ class DownSampledDataset(Dataset):
 
 if __name__ == "__main__":
     # sz_data = Dataset_Shenzhen(root_path='data_provider/data/shenzhen_8_6', flag='test', time_range=['00:00:00', '23:59:59'], time_unit=5, window_size=2)
-    sz_data = miniDataset(root_path='data_provider/data/shenzhen_8_6', flag='test', time_unit=5, window_size=2)
+    # sz_data = miniDataset(root_path='data_provider/data/shenzhen_8_6', flag='test', time_unit=5, window_size=2)
+    sz_data = BinaryClassificationDataset(100, 8)
     sz_data = DownSampledDataset(sz_data.x_data, sz_data.y_data)
-    data_loader = DataLoader(sz_data, batch_size=4, shuffle=True)
+    data_loader = DataLoader(sz_data, batch_size=32, shuffle=True)
     for batch in data_loader:
         x, y = batch
         print(x, y)
         print(x.shape, y.shape)
         break 
+
+# BUG: the edge indices are also normalized
+# TO DO: split the x into x_idx, x_feature
