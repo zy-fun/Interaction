@@ -21,5 +21,8 @@ def get_model(cfg):
         ) 
 
     if cfg.load_model:
+        print("loading model from", cfg.load_path)
         model.load_state_dict(torch.load(cfg.load_path))
+    else:
+        print('initializing empty model')
     return model
