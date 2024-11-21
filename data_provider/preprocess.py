@@ -1,5 +1,5 @@
-import dask.bag as db
 from pyspark.sql import SparkSession
+import os
 import re
 import time
 import pickle
@@ -16,9 +16,10 @@ class Preprocess_Shenzhen:
             .getOrCreate()
 
         for data_type in data_types:
+            # self.txt_to_pkl(data_type=data_type)
             self.traj_to_datapoints(data_type=data_type)   
 
-    def traj_to_datapoints(self, slice_len=1000, data_type='test'):
+    def traj_to_datapoints(self, slice_len=300, data_type='test'):
         file_path = f"data_provider/data/shenzhen_8_6/shenzhen_{data_type}_traj.pkl"
         save_path = f"data_provider/data/shenzhen_8_6/shenzhen_{data_type}_traj.parquet"
         with open(file_path, 'rb') as file:
@@ -44,44 +45,33 @@ class Preprocess_Shenzhen:
                     append_traj.append((*point, 1))
             return append_traj
 
+        def append_traj_id_field(x):
+            traj, traj_id = x
+            return [(*point, traj_id) for point in traj]
+
         def append_end_of_traj_field(traj):
             return [(*point, 1 if i == len(traj)-1 else 0) for i, point in enumerate(traj)]
 
         rdd = rdd.map(append_stay_time_field).map(append_about_to_move_field)
+        rdd = rdd.zipWithIndex().map(append_traj_id_field)
         flattened_rdd = rdd.flatMap(append_end_of_traj_field)
             
-        df = flattened_rdd.toDF()
+        columns = ['time', 'edge_id', 'stay_time', 'about_to_move', 'traj_id', 'end_of_traj']
+        df = flattened_rdd.toDF(columns)
         df.show()
         df.write.mode('overwrite').parquet(save_path)
         return data, df
 
-def read_shenzhen_txt_db(self, filename):
-    bag = db.read_text(filename, blocksize='32MB')
-    print(bag.npartitions)
-    bag = bag.map(lambda line: [int(i) for i in re.findall(r'\d+', line)[1:]])
-    results = bag.map(lambda traj: [(traj[i], traj[i+1]) for i in range(0, len(traj), 2)]).compute()
-    return results
-
-def shenzhen_txt_to_pkl():
-    for data_type in ['train', 'val', 'test']:
-        data_type = 'test'
+    def txt_to_pkl(self, slice_len=1000, data_type='test'):
         file_path = f"data_provider/data/shenzhen_8_6/shenzhen_{data_type}_traj.txt"
-        start_time  = time.time()
-        results = read_shenzhen_txt_db(file_path)
-        print("Time: ", time.time() - start_time)
+        save_path = f"data_provider/data/shenzhen_8_6/shenzhen_{data_type}_traj.pkl"
 
-        save_path = f'data_provider/data/shenzhen_8_6/shenzhen_{data_type}_traj.pkl'
+        rdd = self.spark.sparkContext.textFile(file_path)
+        rdd = rdd.map(lambda line: [int(i) for i in re.findall(r'\d+', line)[1:]])
+        results = rdd.map(lambda traj: [(traj[i], traj[i+1]) for i in range(0, len(traj), 2)]).collect()
+
         with open(save_path, 'wb') as file:
             pickle.dump(results, file) 
 
 if __name__ == "__main__":
     preprocess = Preprocess_Shenzhen(data_types=['test'])
-    # data_type = 'test'
-    # file_path = f"data_provider/data/shenzhen_8_6/shenzhen_{data_type}_traj.txt"
-    # start_time  = time.time()
-    # results = read_shenzhen_txt_db(file_path)
-    # print("Time: ", time.time() - start_time)
-
-    # save_path = f'data_provider/data/shenzhen_8_6/shenzhen_{data_type}_traj.pkl'
-    # with open(save_path, 'wb') as file:
-    #     pickle.dump(results, file) 
