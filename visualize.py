@@ -4,6 +4,8 @@ import numpy as np
 from lxml import etree
 import ast
 import pickle
+from pyspark.sql import SparkSession
+from tqdm import tqdm
 # import pandas as pd
 
 def plot_roadnet(edge_file):
@@ -102,14 +104,77 @@ def plot_traj(fig, edges_loc, traj_file, fig_save_path):
                     plt.plot(loc[0], loc[1], linewidth=3, color='red', zorder=100)
     plt.savefig(fig_save_path)
 
-def plot_loss(loss_file, fig_save_path, slice_length=2487):
+def plot_loss(loss_file, fig_save_path, slice_length=140):
     with open(loss_file, 'rb') as f:
         loss = pickle.load(f)
 
     loss = [sum(loss[i * slice_length: (i+1) *slice_length]) / slice_length for i in range(0, len(loss) // slice_length)]
-    batches = range(len(loss))
-    plt.plot(batches, loss)
+    batches = list(range(len(loss)))
+    print(loss)
+    plt.plot(batches, loss, scaley=False)
     plt.savefig(fig_save_path)
+
+class Shenzhen_Visualizer:
+    def __init__(self):
+        self.spark = SparkSession.builder.appName("Shenzhen_Visualizer").getOrCreate()
+        self.direction_field_visualize(data_type='test', traj_indices=list(np.random.randint(0, 1000, 20)))
+
+    def direction_field_visualize(self, data_type='test', traj_indices=[]):
+        traj_path = f"data_provider/data/shenzhen_8_6/shenzhen_{data_type}_traj.parquet"
+        edge_path = f"data_provider/data/shenzhen_8_6/edges_with_direction.parquet"
+
+        traj_df = self.spark.read.parquet(traj_path)
+        edge_df = self.spark.read.parquet(edge_path)
+        traj_df = traj_df.filter(traj_df.traj_id.isin(traj_indices) & (traj_df.about_to_move == 1))
+        edge_ids = set(traj_df.select('edge_id').distinct().rdd.map(lambda x: x[0]).collect())
+    
+        edge_dict = dict(
+            edge_df.rdd
+            .filter(lambda row: row.id in edge_ids)
+            .map(lambda row: (row.id, ((row.from_x, row.to_x), (row.from_y, row.to_y))))
+            .collect()
+        )
+    
+        edge_dict_broadcast = self.spark.sparkContext.broadcast(edge_dict)
+        
+        def single_trajectory_direction_field_visualize(data_type, traj_id):
+            # 0 for left, 1 for straight, 2 for right, 3 for back
+            # traj_copy = self.spark.createDataFrame(traj_df.toPandas())
+            traj = traj_df.filter(traj_df.traj_id == traj_id).collect()
+            
+            color_dict = {
+                0: 'red',
+                1: 'blue',
+                2: 'green',
+                3: 'yellow',
+            }
+            label_dict = {
+                0: 'Left',
+                1: 'Straight',
+                2: 'Right',
+                3: 'Back'
+            }
+        
+            for i, point in enumerate(traj):
+                edge_id = point.edge_id
+                x_coord, y_coord = edge_dict[edge_id]
+                if i == 0:
+                    plt.plot(x_coord[0], y_coord[0], color='black', label='Start', marker='o', ms=10)
+                elif i == len(traj) - 1:
+                    plt.plot(x_coord[-1], y_coord[-1], color='black', label='End', marker='*', ms=15)
+
+                plt.plot(x_coord, y_coord, color=color_dict[point.direction], label='', marker='o', ms=5)
+
+            plt.title(f'Direction Field Visualization of Trajectory {traj_id} in {data_type} Set')
+            
+            handles = [plt.plot([], [], color=color_dict[i], label=label_dict[i])[0] for i in range(4)]
+            plt.legend(handles=handles)
+            plt.savefig(f'fig/shenzhen_8_6/direction_field_visualize/{data_type}_{traj_id}.png')
+            plt.close()
+        
+        for traj_id in tqdm(traj_indices):
+            single_trajectory_direction_field_visualize(data_type=data_type, traj_id=traj_id)
+        
 
 if __name__ == '__main__':
     # plot_roadnet('data/edge.csv')
@@ -117,5 +182,6 @@ if __name__ == '__main__':
     # plot_road_legnth_hist('data/edge.csv')
     # roadnet_fig, edges_loc = plot_roadnet_from_xml('data_provider/data/shenzhen_8_6/edge_sumo.edg.xml', 'data_provider/data/shenzhen_8_6/node_sumo.nod.xml', 'fig/shenzhen_8_6/roadnet.png')
     # plot_traj(roadnet_fig, edges_loc, 'data_provider/data/shenzhen_8_6/shenzhen_val_traj.txt', 'fig/shenzhen_8_6/traj_val.png')
-    plot_loss('checkpoints/241112_1616 dataname_shenzhen_8_6 windowsize_2 blockdims_[64, 64, 32, 16] trainepochs_200 batchsize_256 learningrate_0.01/loss.pkl', 'fig/loss.png')
+    # plot_loss('checkpoints/241114_2058 dataname_binary_classification windowsize_2 blockdims_[64, 32, 32] trainepochs_1000 batchsize_64 learningrate_0.008/loss.pkl', 'fig/loss.png')
+    Shenzhen_Visualizer()
     pass
