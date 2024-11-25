@@ -6,6 +6,7 @@ import time
 import numpy as np
 import pandas as pd
 import pickle
+from itertools import pairwise
 
 class Preprocess_Shenzhen:
     def __init__(self, data_types=['train','val', 'test']):
@@ -17,13 +18,14 @@ class Preprocess_Shenzhen:
             .master("local") \
             .appName("Preprocess Shenzhen") \
             .getOrCreate()
+            
+        # self.get_directions_of_edges()
 
         for data_type in data_types:
             # self.txt_to_pkl(data_type=data_type)
-            # self.traj_to_datapoints(data_type=data_type)   
+            self.traj_to_datapoints(data_type=data_type)   
             pass
 
-        self.get_directions_of_edges()
 
     def get_directions_of_edges(self):
         edg_xml_file = "data_provider/data/shenzhen_8_6/edge_sumo.edg.xml"
@@ -107,7 +109,7 @@ class Preprocess_Shenzhen:
         with open(file_path, 'rb') as file:
             data = pickle.load(file)
         
-        # (time, edge_id)
+        # [[(time, edge_id), ...], ...  ]
         rdd = self.spark.sparkContext.parallelize(data, numSlices=len(data) // slice_len)
         
         def append_stay_time_field(traj):
@@ -128,6 +130,34 @@ class Preprocess_Shenzhen:
                     append_traj.append((*point, 1))
             return append_traj
 
+        def append_direction_field(traj):
+            # traj: [(time, edge_id, ...), ...]
+            # 0 for turn left, 1 for go straight, 2 for turn right, 3 for turn back
+            # set direction field to 'straight' for the last point of each traj
+            result_traj = []
+            for i, point in enumerate(traj):
+                if i == len(traj)-1:
+                    result_traj.append((*point, 1))
+                else:
+                    result_traj.append((*point, get_direction(edges_dict[point[1]], edges_dict[traj[i+1][1]])))
+            return result_traj
+        
+        def get_direction(vec1, vec2):
+            # 0 for turn left, 1 for go straight, 2 for turn right, 3 for turn back
+            cross_product = np.cross(vec1, vec2)
+            dot_product = np.dot(vec1, vec2)
+            angle = np.arctan2(cross_product, dot_product)
+            angle_degrees = np.degrees(angle)
+            
+            if -45 <= angle_degrees <= 45:
+                return 1    # 直行
+            elif 45 < angle_degrees <= 135:
+                return 0    # 左转
+            elif -135 <= angle_degrees < -45:
+                return 2    # 右转
+            else:  # angle_degrees > 135 or angle_degrees < -135
+                return 3    # 掉头
+
         def append_traj_id_field(x):
             traj, traj_id = x
             return [(*point, traj_id) for point in traj]
@@ -135,11 +165,23 @@ class Preprocess_Shenzhen:
         def append_end_of_traj_field(traj):
             return [(*point, 1 if i == len(traj)-1 else 0) for i, point in enumerate(traj)]
 
-        rdd = rdd.map(append_stay_time_field).map(append_about_to_move_field)
+        # fields need to be appended before breaking trajs
+        rdd = rdd.map(append_stay_time_field) \
+            .map(append_about_to_move_field) 
+
+        # calculate direction field
+        edges_df = self.spark.read.parquet("data_provider/data/shenzhen_8_6/edges_with_direction.parquet")
+        edges_dict = dict(edges_df.rdd.map(lambda row: 
+                (int(row.id), np.array(row.direction))
+            ).collect())
+        edges_broadcast = self.spark.sparkContext.broadcast(edges_dict)
+        rdd = rdd.map(append_direction_field)
+
+        # break trajs into data points
         rdd = rdd.zipWithIndex().map(append_traj_id_field)
         flattened_rdd = rdd.flatMap(append_end_of_traj_field)
             
-        columns = ['time', 'edge_id', 'stay_time', 'about_to_move', 'traj_id', 'end_of_traj']
+        columns = ['time', 'edge_id', 'stay_time', 'about_to_move', 'direction', 'traj_id', 'end_of_traj']
         df = flattened_rdd.toDF(columns)
         df.show()
         df.write.mode('overwrite').parquet(save_path)
