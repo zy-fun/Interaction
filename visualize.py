@@ -6,6 +6,8 @@ import ast
 import pickle
 from pyspark.sql import SparkSession
 from tqdm import tqdm
+from matplotlib.collections import LineCollection
+from pyspark.sql.functions import col
 # import pandas as pd
 
 def plot_roadnet(edge_file):
@@ -116,8 +118,97 @@ def plot_loss(loss_file, fig_save_path, slice_length=140):
 
 class Shenzhen_Visualizer:
     def __init__(self):
-        self.spark = SparkSession.builder.appName("Shenzhen_Visualizer").getOrCreate()
-        self.direction_field_visualize(data_type='test', traj_indices=list(np.random.randint(0, 1000, 20)))
+        self.spark = SparkSession.builder \
+            .config("spark.executor.memory", "8g") \
+            .config("spark.driver.memory", "8g") \
+            .config("spark.memory.offHeap.enabled", "true") \
+            .config("spark.memory.offHeap.size", "4g") \
+            .master("local") \
+            .appName("get_num_of_data_points"). \
+            getOrCreate()
+        # self.direction_field_visualize(data_type='train', traj_indices=list(np.random.randint(0, 1000, 10)))
+        # self.intersection_visualize()
+        # for edge_id in tqdm(np.random.randint(0, 26200, 100)):
+        #     self.edge_density_visualize(edge_id=edge_id)
+
+
+    def edge_density_visualize(self, edge_id):
+        direction_dict = {
+            0: 'Left',
+            1: 'Straight',
+            2: 'Right',
+        }
+        color_dict = {
+            0: 'red',
+            1: 'blue',
+            2: 'green',
+        }
+
+        density_path = 'debug/shenzhen_8_6_density_by_lane.parquet'
+        df = self.spark.read.parquet(density_path)
+        df = df.filter(col('edge_id') == edge_id).drop('edge_id').orderBy('time')
+
+        plt.figure(figsize=(12, 6))
+        for direction in direction_dict:
+            direction_df = df.filter(col('direction') == direction).drop('direction')
+            pdf = direction_df.toPandas()
+        
+            plt.plot(pdf['time'], 
+                    pdf['density'], 
+                    color=color_dict[direction],
+                    label=direction_dict[direction])
+
+        plt.title(f'Density over Time on Edge {edge_id}')
+        plt.xlabel('Time')
+        plt.ylabel('Density')
+        plt.grid(True, linestyle='--', alpha=0.7)
+        plt.xticks(rotation=45)
+        plt.legend()
+        plt.tight_layout()
+
+        plt.savefig(f'fig/shenzhen_8_6/density_by_lane_visualize/density_time_series_{edge_id}.png', dpi=300, bbox_inches='tight')
+        plt.close()
+
+
+    def intersection_visualize(self):
+        nodes_path = "data_provider/data/shenzhen_8_6/nodes_with_intersection.parquet"
+        edges_path = "data_provider/data/shenzhen_8_6/edges_with_direction.parquet"
+
+        nodes_df = self.spark.read.parquet(nodes_path)
+        edges_df = self.spark.read.parquet(edges_path)
+
+        segments = edges_df.select('from_x', 'from_y', 'to_x', 'to_y').toPandas().values
+        segments = segments.reshape(-1, 2, 2)
+        fig, ax = plt.subplots(figsize=(12, 12))
+
+        lc = LineCollection(segments, 
+                        colors='blue',
+                        linewidths=0.5,
+                        alpha=0.6)        
+        ax.add_collection(lc)
+        ax.autoscale() 
+
+        intersection_coords = nodes_df.filter(col('intersection or dead end') == 1).select('x', 'y').toPandas().values
+        sc = ax.scatter(intersection_coords[:, 0],  # x坐标
+                    intersection_coords[:, 1],    # y坐标
+                    c='red',               # 颜色
+                    s=5,                  # 点的大小
+                    alpha=0.6,             # 透明度
+                    marker='o')            # 点的形状
+
+        non_intersection_coords = nodes_df.filter(col('intersection or dead end') == 0).select('x', 'y').toPandas().values
+        sc = ax.scatter(non_intersection_coords[:, 0],  # x坐标
+                    non_intersection_coords[:, 1],    # y坐标
+                    c='green',               # 颜色
+                    s=3,                  # 点的大小
+                    alpha=0.3,             # 透明度
+                    marker='o')            # 点的形状
+
+        plt.title('Road Network with Intersections')
+        plt.xlabel('X Coordinate')
+        plt.ylabel('Y Coordinate')
+        plt.savefig('fig/shenzhen_8_6/roadnet_with_intersections.png')
+        plt.close()
 
     def direction_field_visualize(self, data_type='test', traj_indices=[]):
         traj_path = f"data_provider/data/shenzhen_8_6/shenzhen_{data_type}_traj.parquet"
