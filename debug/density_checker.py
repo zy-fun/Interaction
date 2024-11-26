@@ -3,11 +3,13 @@ import os
 import dask.bag as db
 from collections import defaultdict
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, lit
+from pyspark.sql.functions import col, lit, count
 from matplotlib.collections import LineCollection
 import matplotlib.pyplot as plt
 import time
 import numpy as np
+from functools import reduce
+import pyspark.sql
 
 TIME_INTERVAL = 5
     
@@ -21,6 +23,28 @@ class Density_Checker:
             .master("local") \
             .appName("get_num_of_data_points"). \
             getOrCreate()
+
+        self.get_distribution_by_lane(data_types=['train', 'val', 'test'])
+        pass
+
+    def get_distribution_by_lane(self, data_types=['train', 'val', 'test']):
+        dfs = []
+        for data_type in data_types:
+            df = self.spark.read.parquet(f'data_provider/data/shenzhen_8_6/shenzhen_{data_type}_traj.parquet')
+            dfs.append(df)
+        df = reduce(pyspark.sql.DataFrame.union, dfs)
+
+        # synchronize the time
+        df = df.withColumn('time', (col('time') / TIME_INTERVAL).cast('int') * TIME_INTERVAL)
+        df = df \
+            .select('time', 'edge_id', 'direction') \
+            .groupby('time', 'edge_id', 'direction') \
+            .agg(count('*').alias('density'))
+
+        df.write.mode('overwrite').parquet('debug/shenzhen_8_6_density_by_lane.parquet')
+        df.show()
+
+    def check_direction(self):
         pass
 
     def visualize_traffic_density(self, dist, time_range=(5760, 6480)):
@@ -108,6 +132,7 @@ class Density_Checker:
         statistics['avg_data_points_per_traj'] = avg_data_points_per_traj
 
         return statistics
+
 
     def get_distribution_from_file(self, slice_len=1000, data_types=['val', 'test']):
         data = []
@@ -230,15 +255,15 @@ if __name__ == "__main__":
     #     stat = open('debug/statistics.txt', 'r').read()
 
     # get the distribution
-    if os.path.exists('debug/dist.pkl'):
-        with open('debug/dist.pkl', 'rb') as file:
-            dist = pickle.load(file)
-    else:
-        dist = checker.get_distribution_from_file(data_types=data_types)
-        with open('debug/dist.pkl', 'wb') as file:
-            pickle.dump(dist, file)
+    # if os.path.exists('debug/dist.pkl'):
+    #     with open('debug/dist.pkl', 'rb') as file:
+    #         dist = pickle.load(file)
+    # else:
+    #     dist = checker.get_distribution_from_file(data_types=data_types)
+    #     with open('debug/dist.pkl', 'wb') as file:
+    #         pickle.dump(dist, file)
     
-    checker.visualize_traffic_density(dist)
+    # checker.visualize_traffic_density(dist)
 
     # result = checker.get_sum_of_density(dist)
     # print(result)
