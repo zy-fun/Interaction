@@ -18,14 +18,91 @@ class Preprocess_Shenzhen:
             .master("local") \
             .appName("Preprocess Shenzhen") \
             .getOrCreate()
+        
+        # 1. check some properties of the data
+        # self.duplicate_check_in_txt()
             
+        # 2. preprocess road network files
         # self.get_directions_of_edges()
+        self.append_intersection_field()
+
 
         for data_type in data_types:
             # self.txt_to_pkl(data_type=data_type)
-            self.traj_to_datapoints(data_type=data_type)   
+            # self.traj_to_datapoints(data_type=data_type)   
             pass
 
+    def append_intersection_field(self):
+        nod_xml_file = "data_provider/data/shenzhen_8_6/node_sumo.nod.xml"
+        nodes_df = pd.read_xml(nod_xml_file)
+        nodes_df = self.spark.createDataFrame(nodes_df)
+
+        edge_parquet_path = "data_provider/data/shenzhen_8_6/edges_with_direction.parquet"
+        edges_df = self.spark.read.parquet(edge_parquet_path)
+
+        # 1. calculate out_degree and in_degree of each node
+        out_degrees = edges_df.groupBy('from') \
+                         .agg(count('*').alias('out_degree'))
+        in_degrees = edges_df.groupBy('to') \
+                            .agg(count('*').alias('in_degree'))   
+        nodes_df = nodes_df \
+            .join(out_degrees, nodes_df.id == out_degrees['from'], 'left') \
+            .join(in_degrees, nodes_df.id == in_degrees['to'], 'left') \
+            .fillna(0) \
+            .drop('from', 'to')        
+        # assert nodes_df.select(sum(nodes_df.out_degree)).collect()[0][0] == nodes_df.select(sum(nodes_df.in_degree)).collect()[0][0]
+        # assert nodes_df.select(sum(nodes_df.out_degree)).collect()[0][0] == edges_df.count()
+
+        # 2. append intersection or dead end field
+        nodes_df = nodes_df.withColumn('intersection or dead end',
+            when((col('in_degree') != 1) | (col('out_degree') != 1), 1).otherwise(0)
+        )
+
+        # 3. 
+        simple_paths = edges_df.alias('edges') \
+            .join(
+                nodes_df.filter((col('in_degree') == 1) & (col('out_degree') == 1))
+                    .select('id')
+                    .alias('nodes'),
+                col('edges.to') == col('nodes.id'),  # 使用别名区分
+                'inner'
+            ) \
+            .select('edges.from', 'edges.to') \
+            .alias('in_edges') \
+            .join(
+                edges_df.alias('out_edges'),
+                col('in_edges.to') == col('out_edges.from'),
+                'inner'
+            ) \
+            .select(
+                col('in_edges.to').alias('id'),
+                col('in_edges.from').alias('from_node'),
+                col('out_edges.to').alias('to_node')
+            )
+
+        nodes_df = nodes_df \
+            .join(simple_paths, 'id', 'left') \
+            .withColumn(
+                'from_node',
+                col('from_node')
+            ) \
+            .withColumn(
+                'to_node',
+                col('to_node')
+            )
+
+        nodes_df = nodes_df.withColumn(
+            'intersection or dead end',
+            when(
+                (col('from_node').isNotNull()) &  # from_node 不为 null
+                (col('to_node').isNotNull()) &    # to_node 不为 null
+                (col('from_node') == col('to_node')),  # from_node 等于 to_node
+                1
+            ).otherwise(col('intersection or dead end'))
+        )
+
+        nodes_df.write.mode('overwrite').parquet("data_provider/data/shenzhen_8_6/nodes_with_intersection.parquet")
+        nodes_df.show()
 
     def get_directions_of_edges(self):
         edg_xml_file = "data_provider/data/shenzhen_8_6/edge_sumo.edg.xml"
@@ -151,12 +228,10 @@ class Preprocess_Shenzhen:
             
             if -45 <= angle_degrees <= 45:
                 return 1    # 直行
-            elif 45 < angle_degrees <= 135:
-                return 0    # 左转
-            elif -135 <= angle_degrees < -45:
+            elif 45 < angle_degrees <= 180:
+                return 0    # 左转 or 掉头
+            else: # -180 < angle_degrees < -45:
                 return 2    # 右转
-            else:  # angle_degrees > 135 or angle_degrees < -135
-                return 3    # 掉头
 
         def append_traj_id_field(x):
             traj, traj_id = x
@@ -186,6 +261,23 @@ class Preprocess_Shenzhen:
         df.show()
         df.write.mode('overwrite').parquet(save_path)
         return data, df
+
+    def duplicate_check_in_txt(self):
+        rdds = []
+        for data_type in ['train', 'val', 'test']:
+            file_path = f"data_provider/data/shenzhen_8_6/shenzhen_{data_type}_traj.txt"
+            rdds.append(self.spark.sparkContext.textFile(file_path))
+        rdd = self.spark.sparkContext.union(rdds)
+        count_before_distinct = rdd.count()
+        rdd = rdd.distinct()
+        count_dinstincted_including_traj_id = rdd.count()
+        rdd = rdd.map(lambda line: line.split()[1:]) \
+            .map(lambda traj: ' '.join(traj)) \
+            .distinct()
+        count_dinstincted_excluding_traj_id = rdd.count()
+        print(f"count_before_distinct: {count_before_distinct}")
+        print(f"count_dinstincted_including_traj_id: {count_dinstincted_including_traj_id}")
+        print(f"count_dinstincted_excluding_traj_id: {count_dinstincted_excluding_traj_id}")
 
     def txt_to_pkl(self, slice_len=1000, data_type='test'):
         file_path = f"data_provider/data/shenzhen_8_6/shenzhen_{data_type}_traj.txt"
@@ -218,4 +310,4 @@ class Preprocess_Traffic_Light:
 
 
 if __name__ == "__main__":
-    preprocess = Preprocess_Shenzhen(data_types=['test'])
+    preprocess = Preprocess_Shenzhen(data_types=['train', 'val', 'test'])
