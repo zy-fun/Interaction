@@ -7,7 +7,7 @@ import pickle
 from pyspark.sql import SparkSession
 from tqdm import tqdm
 from matplotlib.collections import LineCollection
-from pyspark.sql.functions import col
+from pyspark.sql.functions import col, sum
 # import pandas as pd
 
 def plot_roadnet(edge_file):
@@ -126,11 +126,41 @@ class Shenzhen_Visualizer:
             .master("local") \
             .appName("get_num_of_data_points"). \
             getOrCreate()
+
+        self.density_distribution_visualize()
         # self.direction_field_visualize(data_type='train', traj_indices=list(np.random.randint(0, 1000, 10)))
         # self.intersection_visualize()
         # for edge_id in tqdm(np.random.randint(0, 26200, 100)):
         #     self.edge_density_visualize(edge_id=edge_id)
 
+    def density_distribution_visualize(self):
+        direction_dict = {
+            0: 'Left',
+            1: 'Straight',
+            2: 'Right',
+        }
+        color_dict = {
+            0: 'red',
+            1: 'blue',
+            2: 'green',
+        }
+        density_path = 'debug/shenzhen_8_6_density_by_lane.parquet'
+        df = self.spark.read.parquet(density_path)
+        
+        for direction in direction_dict:
+            direction_df = df.filter(col('direction') == direction).drop('direction', 'time') \
+                .groupby('edge_id') \
+                .agg(sum('density').alias('density'))
+            direction_density = direction_df.agg(sum('density')).collect()[0][0]
+            print(direction_dict[direction], direction_density)
+            pdf = direction_df.toPandas()
+            plt.figure(figsize=(12, 6))
+            plt.bar(pdf['edge_id'], pdf['density'], color=color_dict[direction], label=direction_dict[direction])
+            plt.title(f'Density Distribution by Edge ({direction_dict[direction]})')
+            plt.xlabel('Edge ID')
+            plt.ylabel('Density')
+            plt.legend()
+            plt.savefig(f'fig/shenzhen_8_6/density_distribution_by_edge_{direction}.png')
 
     def edge_density_visualize(self, edge_id):
         direction_dict = {
