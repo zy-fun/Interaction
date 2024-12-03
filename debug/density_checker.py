@@ -4,6 +4,7 @@ import dask.bag as db
 from collections import defaultdict
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, lit, count
+from pyspark.sql.functions import sum as spark_sum
 from matplotlib.collections import LineCollection
 import matplotlib.pyplot as plt
 import time
@@ -23,9 +24,7 @@ class Density_Checker:
             .master("local") \
             .appName("get_num_of_data_points"). \
             getOrCreate()
-
-        self.get_distribution_by_lane(data_types=['train', 'val', 'test'])
-        pass
+        self.filter_low_density_and_get_passing_count()
 
     def get_distribution_by_lane(self, data_types=['train', 'val', 'test']):
         dfs = []
@@ -43,6 +42,29 @@ class Density_Checker:
 
         df.write.mode('overwrite').parquet('debug/shenzhen_8_6_density_by_lane.parquet')
         df.show()
+
+    def filter_low_density_and_get_passing_count(self, threshold=240000, data_types=['train', 'val', 'test']):
+        # 滤掉流量较小的边
+        # 1. 选出流量大于等于threshold的边
+        density_df = self.spark.read.parquet('debug/shenzhen_8_6_density_by_lane.parquet')
+        density_df = density_df.groupby('edge_id').agg(spark_sum('density').alias('density'))
+        density_df = density_df.filter(col('density') >= threshold)
+        
+        # 2. 计算出这些边上的通行量
+        dfs = []
+        for data_type in data_types:
+            df = self.spark.read.parquet(f'data_provider/data/shenzhen_8_6/shenzhen_{data_type}_traj.parquet')
+            dfs.append(df)
+        df = reduce(pyspark.sql.DataFrame.union, dfs).drop('stay_time', 'traj_id', 'end_of_traj') \
+            .filter(col('about_to_move') == 1) \
+            .groupby('edge_id', 'time', 'direction') \
+            .agg(count('*').alias('passing_count'))
+        df = df.join(density_df, on='edge_id', how='inner').drop('density')
+
+        df.show()
+        edge_count = df.select('edge_id').distinct().count()
+        print(f'edge_count: {edge_count}')
+        df.write.mode('overwrite').parquet('debug/shenzhen_8_6_passing_count.parquet')
 
     def check_direction(self):
         pass
