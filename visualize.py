@@ -7,7 +7,8 @@ import pickle
 from pyspark.sql import SparkSession
 from tqdm import tqdm
 from matplotlib.collections import LineCollection
-from pyspark.sql.functions import col, sum
+from pyspark.sql.functions import col, sum, when
+import os
 # import pandas as pd
 
 def plot_roadnet(edge_file):
@@ -127,11 +128,68 @@ class Shenzhen_Visualizer:
             .appName("get_num_of_data_points"). \
             getOrCreate()
 
-        self.density_distribution_visualize()
+        # density_path = 'debug/shenzhen_8_6_density_by_lane.parquet'
+
+        # self.visualize_traffic_density_on_roadnet(time_range=[0, 86400])
+
+        
+        # self.density_distribution_visualize()
+
         # self.direction_field_visualize(data_type='train', traj_indices=list(np.random.randint(0, 1000, 10)))
         # self.intersection_visualize()
-        # for edge_id in tqdm(np.random.randint(0, 26200, 100)):
+
+
+        # df = self.spark.read.parquet(density_path)
+        # # df = df.groupBy('edge_id').agg(sum('density').alias('density')).sort('density', ascending=False)
+        # # 平均每个采样点有5辆车
+        # pdf = df.groupBy('edge_id').agg(sum('density').alias('density')).filter(col('density') > 150000).select('edge_id').toPandas()
+        # print(len(pdf))
+        # for edge_id in tqdm(pdf['edge_id']):
         #     self.edge_density_visualize(edge_id=edge_id)
+
+        self.edge_passing_visualize()
+    
+
+    def visualize_traffic_density_on_roadnet(self, time_range=[0, 86400]):
+        # 绘制流量在路网上的分布，灰色为流量的路段，红色为流量大于0的路段
+        # 1. calculate the density of each edge
+        density_path = 'debug/shenzhen_8_6_density_by_lane.parquet'
+        density_df = self.spark.read.parquet(density_path)
+        density_df = density_df.filter(col('time').between(time_range[0], time_range[1])).groupBy('edge_id').agg(sum('density').alias('density'))
+
+        edge_path = 'data_provider/data/shenzhen_8_6/edges_with_direction.parquet'
+        edge_df = self.spark.read.parquet(edge_path)
+        edge_df = edge_df.select('id', 'from_x', 'from_y', 'to_x', 'to_y')
+        edge_df = edge_df.join(density_df, edge_df.id == density_df.edge_id, 'left').drop('edge_id').fillna(0)
+        
+        pos_density_df = edge_df.filter(col('density') > 0)
+        zero_density_df = edge_df.filter(col('density') == 0)
+        fig, ax = plt.subplots(figsize=(12, 12))
+
+        def draw_segments(df, is_pos):
+            segments = df.select('from_x', 'from_y', 'to_x', 'to_y').toPandas().values
+            segments = segments.reshape(-1, 2, 2)
+            if is_pos:
+                colors = 'red'
+                density_ratio = df.select('density').toPandas()['density'] / df.select('density').toPandas()['density'].max()
+                alpha = density_ratio * 0.9 + 0.1
+            else:
+                colors = 'gray'
+                alpha = 0.3 
+            lc = LineCollection(segments, 
+                            colors=colors,
+                            linewidths=0.5,
+                            alpha=alpha)        
+            ax.add_collection(lc)
+
+        draw_segments(zero_density_df, False)
+        draw_segments(pos_density_df, True)
+        ax.autoscale() 
+        plt.title('Traffic Density Distribution on Whole Roadnet')
+        plt.xlabel('X Coordinate')
+        plt.ylabel('Y Coordinate')
+        plt.savefig('fig/shenzhen_8_6/traffic_density_on_roadnet.png')
+        plt.close()     
 
     def density_distribution_visualize(self):
         direction_dict = {
@@ -161,6 +219,55 @@ class Shenzhen_Visualizer:
             plt.ylabel('Density')
             plt.legend()
             plt.savefig(f'fig/shenzhen_8_6/density_distribution_by_edge_{direction}.png')
+    
+    def edge_passing_visualize(self, time_range=[39600, 39900]):
+        direction_dict = {
+            0: 'Left',
+            1: 'Straight',
+            2: 'Right',
+        }
+        color_dict = {
+            0: 'red',
+            1: 'blue',
+            2: 'green',
+        }
+
+        path = 'debug/shenzhen_8_6_passing_count.parquet'
+        df = self.spark.read.parquet(path)
+        df = df.filter(col('time').between(time_range[0], time_range[1])) 
+            # .withColumn('passing_count', when(col('passing_count') > 0, 1).otherwise(col('passing_count')))
+        edge_list = df.select('edge_id').distinct().rdd.map(lambda x: x[0]).collect()
+        
+        if not os.path.exists('fig/shenzhen_8_6/passing_count_visualize'):
+            os.makedirs('fig/shenzhen_8_6/passing_count_visualize')
+
+        for edge_id in tqdm(edge_list):
+            plt.figure(figsize=(12, 6))
+            for direction in direction_dict:
+                # direction_df = df.filter((col('edge_id') == edge_id) & (col('direction') == direction)) \
+                #     .drop('direction') \
+                #     .sort('time')
+                direction_df = df.filter((col('edge_id') == edge_id) & (col('direction') == direction)) \
+                    .sort('time')
+                pdf = direction_df.toPandas()
+            
+                plt.scatter(pdf['time'], 
+                        pdf['direction'], 
+                        color=color_dict[direction],
+                        label=direction_dict[direction])
+
+            plt.title(f'Passing Count over Time on Edge {edge_id}')
+            plt.xlabel('Time')
+            plt.ylabel('Density')
+            plt.grid(True, linestyle='--', alpha=0.7)
+            plt.xticks(rotation=45)
+            plt.legend()
+            plt.tight_layout()
+
+            save_path = f'fig/shenzhen_8_6/passing_count_visualize/edge {edge_id}.png'
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            plt.close()
+
 
     def edge_density_visualize(self, edge_id):
         direction_dict = {

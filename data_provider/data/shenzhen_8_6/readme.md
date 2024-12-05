@@ -1,0 +1,3 @@
+Shenzhen_edges_mapping.csv文件中，Edge ID对应的是edge_sumo.edge.xml中的ID
+Index对应的是shenzhen_test_traj_new.txt中的编号。
+目前我们的方案是统一使用Index。

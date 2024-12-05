@@ -1,5 +1,5 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import *
+from pyspark.sql.functions import col, count, when
 import os
 import re
 import time
@@ -101,8 +101,14 @@ class Preprocess_Shenzhen:
             ).otherwise(col('intersection or dead end'))
         )
 
+        intersection_count = nodes_df.filter(col('intersection or dead end') == 1).count()
+        non_intersection_count = nodes_df.filter(col('intersection or dead end') == 0).count()
+        print(f"intersection_count: {intersection_count}")
+        print(f"non_intersection_count: {non_intersection_count}")
+
         nodes_df.write.mode('overwrite').parquet("data_provider/data/shenzhen_8_6/nodes_with_intersection.parquet")
         nodes_df.show()
+    
 
     def get_directions_of_edges(self):
         edg_xml_file = "data_provider/data/shenzhen_8_6/edge_sumo.edg.xml"
@@ -220,7 +226,7 @@ class Preprocess_Shenzhen:
             return result_traj
         
         def get_direction(vec1, vec2):
-            # 0 for turn left, 1 for go straight, 2 for turn right, 3 for turn back
+            # 0 for turn left, 1 for go straight, 2 for turn right
             cross_product = np.cross(vec1, vec2)
             dot_product = np.dot(vec1, vec2)
             angle = np.arctan2(cross_product, dot_product)

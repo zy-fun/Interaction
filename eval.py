@@ -27,11 +27,11 @@ if __name__ == "__main__":
     parser.add_argument('--state_hidden', type=int, default=8, help='state hidden dimension')
     parser.add_argument('--input_dim', type=int, default=5, )
     parser.add_argument('--output_dim', type=int, default=1)
-    parser.add_argument('--block_dims', type=int, nargs='+', default=[64, 64, 32, 16], help='block dimensions')
+    parser.add_argument('--block_dims', type=int, nargs='+', default=[64, 32, 16, 8], help='block dimensions')
 
     # evaluation
     parser.add_argument('--load_model', type=bool, default=True, help='load model')
-    parser.add_argument('--load_path', type=str, default="checkpoints/data_name_shenzhen_8_6 vocab_size_27910 window_size_2 route_dim_1 space_dim_1 time_dim_1 route_hidden_16 state_hidden_8 block_dims_[64, 64, 32, 16] train_epochs_100 batch_size_128 learning_rate_0.005.pth", help='load path')
+    parser.add_argument('--load_path', type=str, default="checkpoints/241112_1616 dataname_shenzhen_8_6 windowsize_2 blockdims_[64, 64, 32, 16] trainepochs_200 batchsize_256 learningrate_0.01/epoch_199.pth", help='load path')
     parser.add_argument('--device', type=str, default='cuda', help='device')
     parser.add_argument('--batch_size', type=int, default=128, help='batch size of train input data')
 
