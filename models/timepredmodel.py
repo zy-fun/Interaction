@@ -7,30 +7,32 @@ class Block(nn.Module):
         super().__init__()
         self.activation = activation
         self.fc1 = nn.Linear(input_dim, output_dim)
-        self.bn1 = nn.BatchNorm1d(output_dim)
-        self.relu1 = nn.ReLU()
+        # self.bn1 = nn.BatchNorm1d(output_dim, affine=False)
+        # self.relu1 = nn.ReLU()
+        self.relu1 = nn.LeakyReLU()
         self.fc2 = nn.Linear(output_dim, output_dim)
-        self.bn2 = nn.BatchNorm1d(output_dim)
+        # self.bn2 = nn.BatchNorm1d(output_dim, affine=False)
 
         if input_dim != output_dim:
             self.fc_res = nn.Linear(input_dim, output_dim)
-        self.bn_res = nn.BatchNorm1d(output_dim)
+        # self.bn_res = nn.BatchNorm1d(output_dim)
 
         if self.activation:
-            self.relu2 = nn.ReLU()
+            # self.relu2 = nn.ReLU()
+            self.relu2 = nn.LeakyReLU()
 
     def forward(self, x):
         identity = x  
 
         out = self.fc1(x)
-        out = self.bn1(out)
+        # out = self.bn1(out)
         out = self.relu1(out)
         out = self.fc2(out)
-        out = self.bn2(out)
+        # out = self.bn2(out)
 
         if x.size(-1) != out.size(-1):
             identity = self.fc_res(identity)
-        identity = self.bn_res(identity)
+        # identity = self.bn_res(identity)
         
         out += identity
 
@@ -98,7 +100,6 @@ class TimePredModel(nn.Module):
         for block in self.blocks:
             out = block(out)
 
-        # out = self.sigmoid(out)   # move the sigmoid from model to loss function nn.BCEWithlogitsLoss
         return out   
 
 class MLPModel(nn.Module):
@@ -113,8 +114,8 @@ class MLPModel(nn.Module):
         self.hidden_dims = hidden_dims
         self.output_dim = output_dim
         dims = [input_dim] + hidden_dims
-        self.blocks = nn.ModuleList([Block(in_dim, out_dim) for in_dim, out_dim in zip(dims[:-1], dims[1:])]
-                                    + [Block(hidden_dims[-1], output_dim, activation=False)])
+        self.blocks = nn.ModuleList([Block(in_dim, out_dim) for in_dim, out_dim in zip(dims[:-1], dims[1:])])
+        self.out_proj = nn.Linear(dims[-1], output_dim)
 
     def forward(self, x):
         '''
@@ -123,6 +124,7 @@ class MLPModel(nn.Module):
         '''
         for block in self.blocks:
             x = block(x)
+        x = self.out_proj(x)
         return x
     
 def main_test(test_program: str):
